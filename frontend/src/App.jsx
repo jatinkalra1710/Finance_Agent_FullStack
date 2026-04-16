@@ -17,15 +17,18 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState(null);
   const [error, setError] = useState(null);
-
-  // Convert Yahoo Finance ticker to TradingView format for the chart
+// Convert Yahoo Finance ticker to TradingView format for the chart
   const getTradingViewSymbol = (t) => {
     if (!t) return "BSE:SENSEX"; // Default chart
+    
     const matched = POPULAR_STOCKS.find(s => s.ticker === t);
     if (matched) return matched.tvSymbol;
-    if (t.endsWith('.NS')) return `NSE:${t.replace('.NS', '')}`;
+    
+    // Force BSE mapping to bypass TradingView's NSE embed blocks
+    if (t.endsWith('.NS')) return `BSE:${t.replace('.NS', '')}`;
     if (t.endsWith('.BO')) return `BSE:${t.replace('.BO', '')}`;
-    return t; // Fallback
+    
+    return t; // Fallback for US stocks (e.g., AAPL, TSLA)
   };
 
   const handleAnalyze = async (e) => {
