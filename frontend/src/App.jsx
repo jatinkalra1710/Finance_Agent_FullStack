@@ -4,11 +4,11 @@ import { Activity, Search, TrendingUp, AlertCircle, ShieldAlert, BarChart3, Cloc
 import { AdvancedRealTimeChart } from "react-ts-tradingview-widgets";
 
 const POPULAR_STOCKS = [
-  { name: "Reliance Industries", ticker: "RELIANCE.BO", tvSymbol: "NSE:RELIANCE" },
-  { name: "HDFC Bank", ticker: "HDFCBANK.BO", tvSymbol: "NSE:HDFCBANK" },
-  { name: "TCS", ticker: "TCS.BO", tvSymbol: "NSE:TCS" },
-  { name: "Zomato", ticker: "ETERNAL.BO", tvSymbol: "NSE:ZOMATO" },
-  { name: "Mahindra & Mahindra", ticker: "M&M.BO", tvSymbol: "NSE:M&M" },
+  { name: "Reliance Industries", ticker: "RELIANCE.BO", tvSymbol: "BSE:RELIANCE" },
+  { name: "HDFC Bank", ticker: "HDFCBANK.BO", tvSymbol: "BSE:HDFCBANK" },
+  { name: "TCS", ticker: "TCS.BO", tvSymbol: "BSE:TCS" },
+  { name: "Zomato", ticker: "ETERNAL.BO", tvSymbol: "BSE:ZOMATO" },
+  { name: "Mahindra & Mahindra", ticker: "M&M.BO", tvSymbol: "BSE:M&M" },
 ];
 
 export default function App() {
