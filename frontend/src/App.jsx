@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Activity, Search, TrendingUp, AlertCircle, ShieldAlert, BarChart3, Clock, CheckCircle2 } from 'lucide-react';
+import { Activity, Search, TrendingUp, AlertCircle, ShieldAlert, BarChart3, Clock, CheckCircle2, Coffee } from 'lucide-react';
 import { AdvancedRealTimeChart } from "react-ts-tradingview-widgets";
 
 const POPULAR_STOCKS = [
@@ -16,8 +16,10 @@ export default function App() {
   const [companyName, setCompanyName] = useState('');
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState(null);
+  const [metrics, setMetrics] = useState(null); // NEW: State for Screener metrics
   const [error, setError] = useState(null);
-// Convert Yahoo Finance ticker to TradingView format for the chart
+
+  // Convert Yahoo Finance ticker to TradingView format for the chart
   const getTradingViewSymbol = (t) => {
     if (!t) return "BSE:SENSEX"; // Default chart
     
@@ -38,6 +40,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     setReport(null);
+    setMetrics(null); // Clear previous metrics
 
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
@@ -55,6 +58,7 @@ export default function App() {
       
       const data = await response.json();
       setReport(data.report);
+      setMetrics(data.metrics); // Capture the new metrics from Python
     } catch (err) {
       setError(err.message);
     } finally {
@@ -66,6 +70,7 @@ export default function App() {
     setTicker(stock.ticker);
     setCompanyName(stock.name);
     setReport(null); // Clear previous report when a new stock is clicked
+    setMetrics(null); // Clear previous metrics
   };
 
   return (
@@ -85,9 +90,22 @@ export default function App() {
               <p className="text-slate-500 text-xs font-medium tracking-wide uppercase">7-Agent Institutional Intelligence</p>
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-2 text-sm text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-            Systems Operational
+          
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:flex items-center gap-2 text-sm text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+              Systems Operational
+            </div>
+            {/* NEW: Chai4Me Support Button */}
+            <a 
+              href="https://www.chai4.me/jatinkalra" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 bg-amber-100 hover:bg-amber-200 text-amber-900 px-4 py-2 rounded-full font-medium text-sm transition-colors border border-amber-300 shadow-sm"
+            >
+              <Coffee className="w-4 h-4" />
+              <span className="hidden sm:inline">Keep the servers running</span>
+            </a>
           </div>
         </div>
       </header>
@@ -163,7 +181,8 @@ export default function App() {
           
           {/* Left Column: Interactive Candlestick Chart */}
           <div className={`${report || loading ? 'lg:col-span-5' : 'lg:col-span-12'} transition-all duration-500 ease-in-out`}>
-            <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 h-[600px] overflow-hidden">
+            {/* HEIGHT INCREASED TO 800px TO MATCH REPORT DATA */}
+            <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 h-[800px] overflow-hidden">
               <AdvancedRealTimeChart 
                 theme="light"
                 symbol={getTradingViewSymbol(ticker)}
@@ -176,11 +195,11 @@ export default function App() {
 
           {/* Right Column: AI Analysis Report */}
           {(loading || report || error) && (
-            <div className="lg:col-span-7 space-y-6">
+            <div className="lg:col-span-7 flex flex-col h-[800px]">
               
               {/* Error State */}
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 p-5 rounded-2xl flex items-start gap-3 shadow-sm">
+                <div className="bg-red-50 border border-red-200 text-red-700 p-5 rounded-2xl flex items-start gap-3 shadow-sm mb-6">
                   <AlertCircle className="w-6 h-6 shrink-0 mt-0.5" />
                   <div>
                     <h3 className="font-semibold">Analysis Interrupted</h3>
@@ -191,8 +210,7 @@ export default function App() {
 
               {/* Loading State */}
               {loading && (
-                <div className="bg-white p-12 rounded-2xl shadow-sm border border-slate-200 h-[600px] flex flex-col items-center justify-center text-center relative overflow-hidden">
-                  {/* Subtle pulsing background */}
+                <div className="bg-white p-12 rounded-2xl shadow-sm border border-slate-200 flex-grow flex flex-col items-center justify-center text-center relative overflow-hidden">
                   <div className="absolute inset-0 bg-gradient-to-tr from-blue-50/50 to-indigo-50/50 animate-pulse"></div>
                   
                   <div className="relative z-10">
@@ -207,7 +225,6 @@ export default function App() {
                       Gathering institutional data, evaluating risk matrices, and calculating sentiment.
                     </p>
                     
-                    {/* Simulated loading steps */}
                     <div className="space-y-3 text-left max-w-xs mx-auto w-full">
                       <div className="flex items-center gap-3 text-sm text-slate-600">
                         <CheckCircle2 className="w-4 h-4 text-green-500" /> Connecting to Market Data
@@ -225,13 +242,32 @@ export default function App() {
 
               {/* Success Report State */}
               {report && !loading && (
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 h-[600px] overflow-y-auto custom-scrollbar">
-                  <div className="prose prose-slate max-w-none 
+                <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 flex-grow overflow-y-auto custom-scrollbar flex flex-col relative">
+                  
+                  {/* NEW: Screener.in Style Header Data Grid */}
+                  {metrics && Object.keys(metrics).length > 0 && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-8 shadow-sm shrink-0">
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-y-6 gap-x-4">
+                        {Object.entries(metrics).map(([key, val]) => (
+                          <div key={key} className="flex flex-col">
+                            <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider mb-1">{key}</span>
+                            <span className="text-slate-900 font-semibold text-sm">{val}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Highly Styled Presentation Markdown */}
+                  <div className="prose prose-slate prose-lg max-w-none 
                     prose-headings:text-slate-800 prose-headings:font-bold 
-                    prose-h2:border-b prose-h2:pb-2 prose-h2:mt-8 prose-h2:text-2xl
-                    prose-h3:text-xl prose-h3:text-blue-900
+                    prose-h2:border-b prose-h2:border-slate-200 prose-h2:pb-3 prose-h2:mt-8 prose-h2:text-2xl
+                    prose-h3:text-xl prose-h3:text-blue-800 prose-h3:mt-8
+                    prose-p:text-slate-600 prose-p:leading-relaxed
                     prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline
-                    prose-strong:text-slate-900 prose-ul:list-disc prose-li:my-1">
+                    prose-strong:text-slate-900 prose-strong:font-semibold
+                    prose-ul:list-disc prose-li:my-1.5 prose-li:text-slate-600
+                    prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:rounded-r-lg prose-blockquote:not-italic prose-blockquote:text-slate-700">
                     <ReactMarkdown>{report}</ReactMarkdown>
                   </div>
                 </div>
@@ -257,8 +293,12 @@ export default function App() {
               </ul>
             </div>
           </div>
-          <div className="text-center text-xs border-t border-slate-800 pt-6">
-            <p>© {new Date().getFullYear()} AI Stock Analyst Pro | Powered by 7-Agent Architecture</p>
+          <div className="text-center text-xs border-t border-slate-800 pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
+            <p>© {new Date().getFullYear()} AI Stock Analyst Pro | Developed by Jatin Kalra</p>
+            {/* NEW: Chai4Me Footer Link */}
+            <a href="https://www.chai4.me/jatinkalra" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 transition-colors flex items-center gap-1">
+              <Coffee className="w-3 h-3" /> Support this project
+            </a>
           </div>
         </div>
       </footer>
@@ -266,7 +306,7 @@ export default function App() {
       {/* Custom Scrollbar CSS embedded to keep it simple */}
       <style dangerouslySetInnerHTML={{__html: `
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 8px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}} />
