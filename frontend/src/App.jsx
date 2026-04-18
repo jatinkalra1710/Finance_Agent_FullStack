@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Activity, Search, TrendingUp, AlertCircle, ShieldAlert, BarChart3, Clock, CheckCircle2, Coffee } from 'lucide-react';
+import { Activity, Search, TrendingUp, AlertCircle, ShieldAlert, BarChart3, Clock, CheckCircle2, Coffee, X } from 'lucide-react';
 import { AdvancedRealTimeChart } from "react-ts-tradingview-widgets";
 
 const POPULAR_STOCKS = [
-  { name: "Reliance Industries", ticker: "RELIANCE.NS", tvSymbol: "NSE:RELIANCE" },
-  { name: "HDFC Bank", ticker: "HDFCBANK.NS", tvSymbol: "NSE:HDFCBANK" },
-  { name: "TCS", ticker: "TCS.NS", tvSymbol: "NSE:TCS" },
-  { name: "Zomato", ticker: "ETERNAL.NS", tvSymbol: "NSE:ZOMATO" },
-  { name: "Mahindra & Mahindra", ticker: "M&M.NS", tvSymbol: "NSE:M&M" },
+  { name: "Reliance Industries", ticker: "RELIANCE.NS", tvSymbol: "BSE:RELIANCE" },
+  { name: "HDFC Bank", ticker: "HDFCBANK.NS", tvSymbol: "BSE:HDFCBANK" },
+  { name: "TCS", ticker: "TCS.NS", tvSymbol: "BSE:TCS" },
+  { name: "Zomato", ticker: "ZOMATO.NS", tvSymbol: "BSE:ZOMATO" },
+  { name: "Mahindra & Mahindra", ticker: "M&M.NS", tvSymbol: "BSE:M&M" },
 ];
 
 export default function App() {
@@ -16,21 +16,19 @@ export default function App() {
   const [companyName, setCompanyName] = useState('');
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState(null);
-  const [metrics, setMetrics] = useState(null); // NEW: State for Screener metrics
+  const [metrics, setMetrics] = useState(null);
   const [error, setError] = useState(null);
+  
+  // NEW: State for the unignorable popup
+  const [showPopup, setShowPopup] = useState(true);
 
-  // Convert Yahoo Finance ticker to TradingView format for the chart
   const getTradingViewSymbol = (t) => {
-    if (!t) return "BSE:SENSEX"; // Default chart
-    
+    if (!t) return "BSE:SENSEX"; 
     const matched = POPULAR_STOCKS.find(s => s.ticker === t);
     if (matched) return matched.tvSymbol;
-    
-    // Force BSE mapping to bypass TradingView's NSE embed blocks
     if (t.endsWith('.NS')) return `BSE:${t.replace('.NS', '')}`;
     if (t.endsWith('.BO')) return `BSE:${t.replace('.BO', '')}`;
-    
-    return t; // Fallback for US stocks (e.g., AAPL, TSLA)
+    return t; 
   };
 
   const handleAnalyze = async (e) => {
@@ -40,11 +38,10 @@ export default function App() {
     setLoading(true);
     setError(null);
     setReport(null);
-    setMetrics(null); // Clear previous metrics
+    setMetrics(null);
 
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      
       const response = await fetch(`${backendUrl}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -58,7 +55,7 @@ export default function App() {
       
       const data = await response.json();
       setReport(data.report);
-      setMetrics(data.metrics); // Capture the new metrics from Python
+      setMetrics(data.metrics);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -69,13 +66,56 @@ export default function App() {
   const handleSelectPopular = (stock) => {
     setTicker(stock.ticker);
     setCompanyName(stock.name);
-    setReport(null); // Clear previous report when a new stock is clicked
-    setMetrics(null); // Clear previous metrics
+    setReport(null);
+    setMetrics(null);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col">
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col relative">
       
+      {/* --- NEW: Unignorable "Buy Me a Tea" Popup --- */}
+      {showPopup && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-all duration-300">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 relative animate-in fade-in zoom-in duration-300">
+            <button 
+              onClick={() => setShowPopup(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-full p-1 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <div className="flex justify-center mb-6">
+              <div className="bg-amber-100 p-4 rounded-full border border-amber-200 shadow-inner">
+                <Coffee className="w-10 h-10 text-amber-600" />
+              </div>
+            </div>
+            
+            <h2 className="text-2xl font-bold text-center text-slate-800 mb-3">Welcome to AI Stock Analyst!</h2>
+            <p className="text-center text-slate-600 mb-8 leading-relaxed">
+              This platform uses 7 advanced AI agents to give you institutional-grade stock analysis for free. Running these servers costs money. If this tool helps you make better trades, please consider buying me a tea! ☕
+            </p>
+            
+            <div className="flex flex-col gap-3">
+              <a 
+                href="https://www.chai4.me/jatinkalra" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                onClick={() => setShowPopup(false)}
+                className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3.5 px-4 rounded-xl transition-all shadow-md flex justify-center items-center gap-2 text-lg"
+              >
+                <Coffee className="w-5 h-5" /> Buy me a Tea
+              </a>
+              <button 
+                onClick={() => setShowPopup(false)}
+                className="w-full text-slate-500 hover:text-slate-700 font-medium py-3 px-4 rounded-xl transition-colors text-sm"
+              >
+                Continue to platform
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- Premium Header --- */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
@@ -96,7 +136,6 @@ export default function App() {
               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
               Systems Operational
             </div>
-            {/* NEW: Chai4Me Support Button */}
             <a 
               href="https://www.chai4.me/jatinkalra" 
               target="_blank" 
@@ -104,7 +143,7 @@ export default function App() {
               className="flex items-center gap-2 bg-amber-100 hover:bg-amber-200 text-amber-900 px-4 py-2 rounded-full font-medium text-sm transition-colors border border-amber-300 shadow-sm"
             >
               <Coffee className="w-4 h-4" />
-              <span className="hidden sm:inline">Keep the servers running</span>
+              <span className="hidden sm:inline">Support the servers</span>
             </a>
           </div>
         </div>
@@ -113,15 +152,11 @@ export default function App() {
       {/* --- Main Dashboard Content --- */}
       <main className="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         
-        {/* Top Section: Controls & Popular Stocks */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Input Panel */}
           <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
             <div>
               <h2 className="font-semibold text-lg mb-4 flex items-center gap-2 text-slate-800">
-                <Search className="w-5 h-5 text-blue-600" />
-                Target Asset
+                <Search className="w-5 h-5 text-blue-600" /> Target Asset
               </h2>
               <form onSubmit={handleAnalyze} className="space-y-4">
                 <div>
@@ -144,18 +179,16 @@ export default function App() {
                   {loading ? (
                     <><Activity className="w-5 h-5 animate-spin" /> Orchestrating AI...</>
                   ) : (
-                    <><TrendingUp className="w-5 h-5" /> Generate Investment Memo</>
+                    <><TrendingUp className="w-5 h-5" /> Generate Memo</>
                   )}
                 </button>
               </form>
             </div>
           </div>
 
-          {/* Popular Stocks Panel */}
           <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
             <h2 className="font-semibold text-lg mb-4 flex items-center gap-2 text-slate-800">
-              <BarChart3 className="w-5 h-5 text-blue-600" />
-              Quick Select Indices
+              <BarChart3 className="w-5 h-5 text-blue-600" /> Quick Select Indices
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {POPULAR_STOCKS.map((stock) => (
@@ -176,12 +209,8 @@ export default function App() {
           </div>
         </div>
 
-        {/* --- Dynamic Content Area (Chart & Report) --- */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          
-          {/* Left Column: Interactive Candlestick Chart */}
           <div className={`${report || loading ? 'lg:col-span-5' : 'lg:col-span-12'} transition-all duration-500 ease-in-out`}>
-            {/* HEIGHT INCREASED TO 800px TO MATCH REPORT DATA */}
             <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 h-[800px] overflow-hidden">
               <AdvancedRealTimeChart 
                 theme="light"
@@ -193,11 +222,9 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right Column: AI Analysis Report */}
           {(loading || report || error) && (
             <div className="lg:col-span-7 flex flex-col h-[800px]">
               
-              {/* Error State */}
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 p-5 rounded-2xl flex items-start gap-3 shadow-sm mb-6">
                   <AlertCircle className="w-6 h-6 shrink-0 mt-0.5" />
@@ -208,35 +235,49 @@ export default function App() {
                 </div>
               )}
 
-              {/* Loading State */}
+              {/* --- MODIFIED: Loading State with Google Ad Space --- */}
               {loading && (
-                <div className="bg-white p-12 rounded-2xl shadow-sm border border-slate-200 flex-grow flex flex-col items-center justify-center text-center relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-tr from-blue-50/50 to-indigo-50/50 animate-pulse"></div>
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex-grow flex flex-col relative overflow-hidden h-full">
                   
-                  <div className="relative z-10">
-                    <div className="relative w-20 h-20 mx-auto mb-6">
-                      <div className="absolute inset-0 border-4 border-slate-100 rounded-full"></div>
-                      <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
-                      <Activity className="absolute inset-0 m-auto text-blue-600 w-8 h-8 animate-pulse" />
-                    </div>
-                    
-                    <h3 className="text-2xl font-bold text-slate-800 mb-2">7 Agents Deployed</h3>
-                    <p className="text-slate-500 max-w-sm mx-auto mb-8">
-                      Gathering institutional data, evaluating risk matrices, and calculating sentiment.
-                    </p>
-                    
-                    <div className="space-y-3 text-left max-w-xs mx-auto w-full">
-                      <div className="flex items-center gap-3 text-sm text-slate-600">
-                        <CheckCircle2 className="w-4 h-4 text-green-500" /> Connecting to Market Data
+                  {/* Top Half: AI Animation */}
+                  <div className="h-1/2 flex flex-col items-center justify-center p-8 border-b border-slate-100 relative">
+                    <div className="absolute inset-0 bg-gradient-to-tr from-blue-50/50 to-indigo-50/50 animate-pulse"></div>
+                    <div className="relative z-10 flex flex-col items-center">
+                      <div className="relative w-16 h-16 mb-4">
+                        <div className="absolute inset-0 border-4 border-slate-100 rounded-full"></div>
+                        <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+                        <Activity className="absolute inset-0 m-auto text-blue-600 w-6 h-6 animate-pulse" />
                       </div>
-                      <div className="flex items-center gap-3 text-sm text-slate-600">
-                        <CheckCircle2 className="w-4 h-4 text-green-500" /> Scanning Global News
-                      </div>
-                      <div className="flex items-center gap-3 text-sm text-blue-600 font-medium">
-                        <Clock className="w-4 h-4 animate-spin" /> Synthesizing Final Memo...
+                      <h3 className="text-xl font-bold text-slate-800 mb-1">Agents Orchestrating</h3>
+                      <p className="text-slate-500 text-sm mb-4">Estimated time: 60-90 seconds</p>
+                      <div className="flex items-center gap-2 text-sm text-blue-600 font-medium bg-blue-50 px-4 py-2 rounded-full">
+                        <Clock className="w-4 h-4 animate-spin" /> Synthesizing data...
                       </div>
                     </div>
                   </div>
+
+                  {/* Bottom Half: Google AdSense Container */}
+                  <div className="h-1/2 bg-slate-50 p-6 flex flex-col items-center justify-center">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-3">Advertisement</span>
+                    
+                    {/* >>> GOOGLE ADSENSE CODE GOES HERE <<< */}
+                    <div className="w-full max-w-md h-[250px] bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-inner overflow-hidden relative">
+                      {/* Placeholder text (remove when adding real ad) */}
+                      <p className="text-slate-400 text-sm text-center px-6">
+                        Your Google AdSense block will render here while the user waits for the analysis.
+                      </p>
+                      
+                      {/* Example of how the real code will look:
+                      <ins className="adsbygoogle"
+                           style={{ display: 'block', width: '100%', height: '100%' }}
+                           data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+                           data-ad-slot="XXXXXXXXXX"
+                           data-ad-format="auto"
+                           data-full-width-responsive="true"></ins>
+                      */}
+                    </div>
+                  </div>
+
                 </div>
               )}
 
@@ -244,7 +285,6 @@ export default function App() {
               {report && !loading && (
                 <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 flex-grow overflow-y-auto custom-scrollbar flex flex-col relative">
                   
-                  {/* NEW: Screener.in Style Header Data Grid */}
                   {metrics && Object.keys(metrics).length > 0 && (
                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-8 shadow-sm shrink-0">
                       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-y-6 gap-x-4">
@@ -258,7 +298,6 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* Highly Styled Presentation Markdown */}
                   <div className="prose prose-slate prose-lg max-w-none 
                     prose-headings:text-slate-800 prose-headings:font-bold 
                     prose-h2:border-b prose-h2:border-slate-200 prose-h2:pb-3 prose-h2:mt-8 prose-h2:text-2xl
@@ -286,16 +325,13 @@ export default function App() {
             <div>
               <h4 className="text-slate-200 font-semibold mb-2">REGULATORY & COMPLIANCE DISCLAIMER</h4>
               <ul className="text-xs space-y-2 leading-relaxed">
-                <li><strong className="text-slate-300">Not SEBI Registered:</strong> This system is NOT registered with the Securities and Exchange Board of India (SEBI) as an Investment Advisor under the SEBI (Investment Advisers) Regulations, 2013.</li>
-                <li><strong className="text-slate-300">No Financial Advice:</strong> This platform is for <strong>educational and informational purposes only</strong> and does not constitute investment advice, a recommendation to buy or sell securities, or any form of solicitation.</li>
-                <li><strong className="text-slate-300">AI-Generated Content:</strong> Reports are generated by Artificial Intelligence systems (CrewAI & Google Gemini). Data may be delayed, incomplete, or subject to errors and hallucinations. Always independently verify all information.</li>
-                <li><strong className="text-slate-300">Market Risks:</strong> Equity investments are subject to market risks. Past performance is not indicative of future results. Consult a SEBI-registered financial advisor before making investment decisions.</li>
+                <li><strong className="text-slate-300">Not SEBI Registered:</strong> This system is NOT registered with SEBI as an Investment Advisor.</li>
+                <li><strong className="text-slate-300">No Financial Advice:</strong> This platform is for <strong>educational and informational purposes only</strong>.</li>
               </ul>
             </div>
           </div>
           <div className="text-center text-xs border-t border-slate-800 pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
             <p>© {new Date().getFullYear()} AI Stock Analyst Pro | Developed by Jatin Kalra</p>
-            {/* NEW: Chai4Me Footer Link */}
             <a href="https://www.chai4.me/jatinkalra" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 transition-colors flex items-center gap-1">
               <Coffee className="w-3 h-3" /> Support this project
             </a>
@@ -303,7 +339,6 @@ export default function App() {
         </div>
       </footer>
       
-      {/* Custom Scrollbar CSS embedded to keep it simple */}
       <style dangerouslySetInnerHTML={{__html: `
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 8px; }
