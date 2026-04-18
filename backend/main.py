@@ -37,6 +37,37 @@ class AnalyzeRequest(BaseModel):
 class AnalyzeResponse(BaseModel):
     ticker: str
     report: str
+    metrics: dict  # NEW: Added to send Screener-style metrics to frontend
+
+# --- NEW: Screener Metrics Function ---
+def fetch_screener_metrics(ticker_symbol: str) -> dict:
+    """Fetches key financial ratios for the UI grid."""
+    try:
+        stock = yf.Ticker(ticker_symbol)
+        info = stock.info
+        
+        def fmt_pct(val):
+            return f"{val * 100:.2f}%" if val is not None else "N/A"
+        def fmt_num(val):
+            return f"{val:.2f}" if val is not None else "N/A"
+        def fmt_cr(val):
+            return f"₹{val / 10000000:,.2f} Cr" if val is not None else "N/A"
+
+        return {
+            "Market Cap": fmt_cr(info.get('marketCap')),
+            "Current Price": f"₹{info.get('currentPrice', info.get('regularMarketPrice', 'N/A'))}",
+            "High / Low": f"₹{info.get('fiftyTwoWeekHigh', 'N/A')} / ₹{info.get('fiftyTwoWeekLow', 'N/A')}",
+            "Stock P/E": fmt_num(info.get('trailingPE')),
+            "Book Value": f"₹{info.get('bookValue', 'N/A')}",
+            "Dividend Yield": fmt_pct(info.get('dividendYield')),
+            "ROCE (Proxy)": fmt_pct(info.get('returnOnAssets')), 
+            "ROE": fmt_pct(info.get('returnOnEquity')),
+            "Debt to Eq": fmt_num(info.get('debtToEquity')),
+            "EPS (TTM)": f"₹{info.get('trailingEps', 'N/A')}",
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch metrics: {str(e)}")
+        return {}
 
 # --- AI Tools ---
 @tool("advanced_web_search")
@@ -109,6 +140,9 @@ async def analyze_stock(request: AnalyzeRequest):
         today = datetime.now().strftime("%B %d, %Y")
         ticker = request.ticker
         company_name = request.company_name
+
+        # NEW: Fetch the UI metrics immediately
+        ui_metrics = fetch_screener_metrics(ticker)
 
         # ========================================================================
         # AGENT 1: Senior Market Research Analyst
@@ -312,7 +346,9 @@ async def analyze_stock(request: AnalyzeRequest):
         )
         
         result = crew.kickoff(inputs={"company": company_name, "ticker": ticker})
-        return AnalyzeResponse(ticker=ticker, report=str(result))
+        
+        # MODIFIED: Return report AND metrics
+        return AnalyzeResponse(ticker=ticker, report=str(result), metrics=ui_metrics)
         
     except Exception as e:
         logger.error(f"Analysis failed: {str(e)}")
