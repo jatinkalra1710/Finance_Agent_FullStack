@@ -35,8 +35,8 @@ export default function App() {
   const [termsAgreed, setTermsAgreed] = useState(false);
   
   // USER ACCOUNT STATE
-  const [user, setUser] = useState(null); 
-  const [userTier, setUserTier] = useState('free'); 
+  const [user, setUser] = useState(null); // null = Guest, {...} = Logged In
+  const [userTier, setUserTier] = useState('free'); // 'free', 'basic', 'pro', 'ultra'
   const [generationsToday, setGenerationsToday] = useState(0);
 
   const [loadingStep, setLoadingStep] = useState(0);
@@ -47,11 +47,12 @@ export default function App() {
 
   // Daily Quota Logic
   const checkDailyLimit = () => {
-    if (userTier === 'ultra') return true; 
-    if (userTier === 'pro' && generationsToday < 10) return true; 
-    if (userTier === 'basic' && generationsToday < 5) return true; 
-    if (userTier === 'free' && generationsToday < 1) return true; 
+    if (userTier === 'ultra') return true; // Unlimited
+    if (userTier === 'pro' && generationsToday < 10) return true; // 10 per day
+    if (userTier === 'basic' && generationsToday < 5) return true; // 5 per day
+    if (userTier === 'free' && generationsToday < 1) return true; // 1 Free Demo
     
+    // If they hit this, they are out of credits
     setShowPro(true);
     return false;
   };
@@ -71,14 +72,17 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Load History, Theme, and User Data on boot
     const saved = localStorage.getItem('ai_analyst_history');
     if (saved) setMemoHistory(JSON.parse(saved));
     const savedTheme = localStorage.getItem('ai_analyst_theme');
     if (savedTheme) setTheme(savedTheme);
     
+    // Check if they already agreed to terms so we don't annoy them every refresh
     const hasAgreed = localStorage.getItem('ai_terms_agreed');
     if (!hasAgreed) setShowPopup(true);
 
+    // Track daily usage based on Date
     const today = new Date().toDateString();
     const usageStr = localStorage.getItem('ai_daily_usage');
     if (usageStr) {
@@ -117,6 +121,7 @@ export default function App() {
     e.preventDefault();
     if (!ticker) return;
 
+    // CHECK PAYWALL LIMITS FIRST
     if (!checkDailyLimit()) return; 
 
     setLoading(true);
@@ -139,10 +144,12 @@ export default function App() {
       setReport(data.report);
       setMetrics(data.metrics);
 
+      // Update Daily Quota
       const newCount = generationsToday + 1;
       setGenerationsToday(newCount);
       localStorage.setItem('ai_daily_usage', JSON.stringify({ date: new Date().toDateString(), count: newCount }));
 
+      // Save History
       const newRecord = {
         id: Date.now(),
         ticker: data.ticker,
@@ -179,6 +186,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // --- FIREBASE GOOGLE LOGIN LOGIC ---
   const handleGoogleLogin = async () => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
@@ -197,6 +205,7 @@ export default function App() {
     }
   };
 
+  // History Filter: Free Tier only sees last 7 days
   const getFilteredHistory = () => {
     if (userTier !== 'free') return memoHistory;
     const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
@@ -216,12 +225,15 @@ export default function App() {
   return (
     <div className={`flex h-screen font-sans overflow-hidden relative selection:bg-blue-500/30 transition-colors duration-500 ${baseBg}`}>
       
+      {/* Mesmerizing Background */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
         <div className={`absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full mix-blend-screen filter blur-[100px] animate-blob ${theme==='dark' ? 'bg-blue-900/30' : 'bg-blue-300/40'}`}></div>
         <div className={`absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full mix-blend-screen filter blur-[100px] animate-blob animation-delay-2000 ${theme==='dark' ? 'bg-emerald-900/20' : 'bg-emerald-200/40'}`}></div>
       </div>
 
       {/* --- ALL MODALS --- */}
+      
+      {/* 1. Mandatory Welcome Popup with T&C Checkbox */}
       {showPopup && userTier === 'free' && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl transition-all">
           <div className={`${theme==='dark'?'bg-slate-900 border-slate-800':'bg-white border-slate-200'} rounded-3xl shadow-2xl max-w-md w-full p-8 relative animate-fade-in-up border overflow-hidden`}>
@@ -255,6 +267,7 @@ export default function App() {
                 Access Terminal
               </button>
               
+              {/* Only show coffee link if free tier */}
               <a href="https://www.chai4.me/jatinkalra" target="_blank" rel="noopener noreferrer" className={`w-full ${textMuted} hover:${textHeading} font-semibold py-2 rounded-xl text-xs text-center transition-colors flex justify-center items-center gap-1`}>
                 <Coffee className="w-3 h-3"/> Support Dev Server Costs
               </a>
@@ -263,6 +276,7 @@ export default function App() {
         </div>
       )}
 
+      {/* 2. Auth Modal (Firebase Integrated) */}
       {showAuth && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl">
           <div className={`${theme==='dark'?'bg-slate-900 border-slate-800':'bg-white border-slate-200'} rounded-3xl shadow-2xl max-w-sm w-full p-8 relative animate-fade-in-up border`}>
@@ -280,6 +294,7 @@ export default function App() {
         </div>
       )}
 
+      {/* 3. The SaaS Paywall / Pro Subscription Modal */}
       {showPro && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl overflow-y-auto">
           <div className={`${theme==='dark'?'bg-slate-900 border-slate-800':'bg-slate-50 border-slate-200'} rounded-3xl shadow-2xl max-w-4xl w-full p-8 relative animate-fade-in-up border my-8`}>
@@ -290,8 +305,10 @@ export default function App() {
               <p className={`${textMuted} text-sm max-w-lg mx-auto`}>Unlock the full power of 7-Agent Institutional Intelligence. Save unlimited history, export PDFs, and access the market without limits.</p>
             </div>
 
+            {/* Pricing Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               
+              {/* Basic Tier */}
               <div className={`${theme==='dark'?'bg-slate-800/50 border-slate-700':'bg-white border-slate-200'} p-6 rounded-2xl border flex flex-col`}>
                 <h3 className={`text-lg font-bold ${textHeading} mb-2`}>Basic</h3>
                 <div className="mb-4"><span className={`text-3xl font-extrabold ${textHeading}`}>₹99</span><span className={textMuted}>/mo</span></div>
@@ -303,6 +320,7 @@ export default function App() {
                 <button onClick={() => { setUserTier('basic'); setShowPro(false); alert("Razorpay checkout opens here!"); }} className={`w-full py-3 rounded-xl font-bold transition-colors ${theme==='dark'?'bg-slate-700 text-white hover:bg-slate-600':'bg-slate-100 text-slate-800 hover:bg-slate-200'}`}>Select Basic</button>
               </div>
 
+              {/* Pro Tier (Highlighted) */}
               <div className={`${theme==='dark'?'bg-blue-900/20 border-blue-500':'bg-blue-50 border-blue-500'} p-6 rounded-2xl border-2 flex flex-col relative transform scale-105 shadow-2xl shadow-blue-500/20`}>
                 <div className="absolute top-0 right-0 bg-blue-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg rounded-tr-xl uppercase tracking-widest">Most Popular</div>
                 <h3 className={`text-lg font-bold text-blue-500 mb-2 flex items-center gap-2`}><Crown className="w-4 h-4"/> Pro</h3>
@@ -315,6 +333,7 @@ export default function App() {
                 <button onClick={() => { setUserTier('pro'); setShowPro(false); }} className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl font-bold shadow-lg transition-all">Select Pro</button>
               </div>
 
+              {/* Ultra Tier */}
               <div className={`${theme==='dark'?'bg-slate-800/50 border-slate-700':'bg-white border-slate-200'} p-6 rounded-2xl border flex flex-col`}>
                 <h3 className={`text-lg font-bold ${textHeading} mb-2`}>Ultra</h3>
                 <div className="mb-4"><span className={`text-3xl font-extrabold ${textHeading}`}>₹499</span><span className={textMuted}>/mo</span></div>
@@ -331,6 +350,7 @@ export default function App() {
         </div>
       )}
 
+      {/* 4. Privacy Policy / Terms Modal */}
       {showLegal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl">
           <div className={`${theme==='dark'?'bg-slate-900 border-slate-800':'bg-white border-slate-200'} rounded-3xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col animate-fade-in-up border`}>
@@ -421,6 +441,7 @@ export default function App() {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Core Online
             </div>
             
+            {/* Dynamic Coffee Button: Hide if Pro User */}
             {userTier === 'free' && (
               <a href="https://www.chai4.me/jatinkalra" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-full font-bold text-xs transition-all shadow-md">
                 <Coffee className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Boost Servers</span>
@@ -481,6 +502,7 @@ export default function App() {
             <div className="space-y-6 max-w-[1600px] mx-auto animate-fade-in-up">
               
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Input Panel */}
                 <div className={`lg:col-span-4 ${cardBg} backdrop-blur-xl p-6 rounded-3xl shadow-sm border flex flex-col justify-between relative overflow-hidden group transition-colors duration-500`}>
                   <div className="relative z-10">
                     <h2 className={`font-bold text-lg mb-6 flex items-center gap-2 ${textHeading}`}>
@@ -515,18 +537,17 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[700px]">
+                
+                {/* --- FIXED CHART CONTAINER --- */}
                 <div className="lg:col-span-8 h-full">
-                  <div className={`${cardBg} backdrop-blur-xl p-2 rounded-3xl shadow-sm border h-full overflow-hidden transition-colors duration-500`}>
+                  <div className={`${cardBg} backdrop-blur-xl p-2 rounded-3xl shadow-sm border h-full w-full overflow-hidden transition-colors duration-500`}>
                     <AdvancedRealTimeChart 
-                      key={`${theme}-${ticker || 'default'}`} 
                       theme={theme} 
                       symbol={getTradingViewSymbol(ticker)} 
-                      autosize 
+                      autosize={true}
                       allow_symbol_change={false} 
                       hide_side_toolbar={false} 
                       interval="D" 
-                      range="12M"
-                      timezone="Asia/Kolkata"
                     />
                   </div>
                 </div>
@@ -608,6 +629,7 @@ export default function App() {
                         </div>
                       </div>
                       
+                      {/* ADSENSE SECTION */}
                       <div className={`w-full md:w-1/2 ${theme==='dark'?'bg-slate-950/50':'bg-slate-50'} p-10 flex flex-col items-center justify-center relative`}>
                         <span className={`absolute top-6 left-8 text-[10px] ${textMuted} uppercase tracking-widest font-extrabold flex items-center gap-2`}><Zap className="w-3 h-3"/> Sponsored Payload</span>
                         
@@ -627,6 +649,7 @@ export default function App() {
                     </div>
                   )}
 
+                  {/* REPORT RENDER (ANTI-THEFT FOR FREE TIER) */}
                   {report && !loading && (
                     <div 
                       className={`${cardBg} backdrop-blur-xl p-10 lg:p-14 rounded-3xl shadow-sm border flex flex-col relative transition-colors ${userTier === 'free' ? 'select-none' : 'select-auto'}`}
@@ -639,6 +662,7 @@ export default function App() {
                         </div>
                         
                         <div className="flex gap-3">
+                          {/* ONLY SHOW COPY BUTTON FOR PAID USERS */}
                           {userTier !== 'free' && (
                             <button onClick={handleCopy} className={`flex items-center gap-2 text-xs font-bold ${theme==='dark'?'text-white bg-slate-800 hover:bg-slate-700':'text-slate-700 bg-slate-100 hover:bg-slate-200'} px-5 py-2.5 rounded-full transition-all`}>
                               {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Share2 className="w-4 h-4" />} {copied ? "Copied!" : "Copy Memo"}
