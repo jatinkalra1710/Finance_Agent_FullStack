@@ -55,57 +55,67 @@ async def health_check():
         "agents_online": 7
     }
 
-# --- Screener Metrics Function (EXPANDED) ---
+# --- Bulletproof Screener Metrics Function ---
 def fetch_screener_metrics(ticker_symbol: str) -> dict:
-    """Fetches key financial ratios for the UI grid alongside the chart."""
+    """Fetches key financial ratios with extreme error handling so it never returns empty."""
     try:
         stock = yf.Ticker(ticker_symbol)
         info = stock.info
         
+        # Fortified formatters to prevent silent crashes
         def fmt_pct(val):
-            return f"{val * 100:.2f}%" if val is not None else "N/A"
+            try: return f"{float(val) * 100:.2f}%"
+            except (ValueError, TypeError): return "N/A"
+            
         def fmt_num(val):
-            return f"{val:.2f}" if val is not None else "N/A"
+            try: return f"{float(val):.2f}"
+            except (ValueError, TypeError): return "N/A"
+            
         def fmt_cr(val):
-            return f"₹{val / 10000000:,.2f} Cr" if val is not None else "N/A"
-        
+            try: return f"₹{float(val) / 10000000:,.2f} Cr"
+            except (ValueError, TypeError): return "N/A"
+
         def format_rating(rating):
-            if not rating: return "N/A"
+            if not rating or not isinstance(rating, str): return "N/A"
             return rating.replace('_', ' ').title()
 
+        # Safe extraction
         market_cap = info.get('marketCap')
-        current_price = info.get('currentPrice') or info.get('regularMarketPrice')
-        high = info.get('fiftyTwoWeekHigh')
-        low = info.get('fiftyTwoWeekLow')
-        pe = info.get('trailingPE') or info.get('forwardPE')
-        book_value = info.get('bookValue')
-        dividend_yield = info.get('dividendYield') or info.get('trailingAnnualDividendYield')
+        current_price = info.get('currentPrice', info.get('regularMarketPrice'))
+        day_high = info.get('dayHigh', info.get('regularMarketDayHigh'))
+        day_low = info.get('dayLow', info.get('regularMarketDayLow'))
+        high_52 = info.get('fiftyTwoWeekHigh')
+        low_52 = info.get('fiftyTwoWeekLow')
+        pe = info.get('trailingPE', info.get('forwardPE'))
+        pb_ratio = info.get('priceToBook')
+        dividend_yield = info.get('dividendYield', info.get('trailingAnnualDividendYield'))
         roce = info.get('returnOnAssets') 
         roe = info.get('returnOnEquity')
-        pb_ratio = info.get('priceToBook')
         debt_to_equity = info.get('debtToEquity')
-        
-        # NEW FEATURES ADDED HERE
+        eps = info.get('trailingEps')
         fifty_ma = info.get('fiftyDayAverage')
         two_hundred_ma = info.get('twoHundredDayAverage')
         analyst_rating = info.get('recommendationKey')
 
         return {
             "Market Cap": fmt_cr(market_cap),
-            "Current Price": f"₹{current_price}" if current_price else "N/A",
+            "Current Price": f"₹{fmt_num(current_price)}" if current_price else "N/A",
+            "Day High/Low": f"₹{fmt_num(day_high)} / ₹{fmt_num(day_low)}" if day_high and day_low else "N/A",
+            "52W High/Low": f"₹{fmt_num(high_52)} / ₹{fmt_num(low_52)}" if high_52 and low_52 else "N/A",
             "Stock P/E": fmt_num(pe),
-            "Book Value": f"₹{book_value}" if book_value else "N/A",
+            "Price to Book": fmt_num(pb_ratio),
             "Dividend Yield": fmt_pct(dividend_yield),
             "ROCE (Est)": fmt_pct(roce),
             "ROE": fmt_pct(roe),
-            "Debt to Equity": fmt_num(debt_to_equity),
+            "Debt to Eq": fmt_num(debt_to_equity),
+            "EPS (TTM)": f"₹{fmt_num(eps)}" if eps else "N/A",
             "50-Day MA": f"₹{fmt_num(fifty_ma)}" if fifty_ma else "N/A",
             "200-Day MA": f"₹{fmt_num(two_hundred_ma)}" if two_hundred_ma else "N/A",
-            "Wall St Consensus": format_rating(analyst_rating)
+            "Wall St Rating": format_rating(analyst_rating)
         }
     except Exception as e:
-        logger.error(f"Failed to fetch metrics: {str(e)}")
-        return {}
+        logger.error(f"Screener Metrics Error: {str(e)}")
+        return {"Status": "Data temporarily unavailable via YFinance"}
 
 # --- AI Tools ---
 @tool("advanced_web_search")
