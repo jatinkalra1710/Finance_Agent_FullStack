@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="AI Stock Analyst API - Enterprise Edition",
     description="7-Agent Institutional Intelligence Engine for deep equity research.",
-    version="3.0.0"
+    version="4.0.0"
 )
 
 # CORS Configuration for Frontend Deployment
@@ -55,13 +55,20 @@ async def health_check():
         "agents_online": 7
     }
 
-# --- Bulletproof Screener Metrics Function ---
+# --- Fortified Screener Metrics Function ---
 def fetch_screener_metrics(ticker_symbol: str) -> dict:
     """Fetches key financial ratios with extreme error handling so it never returns empty."""
     try:
+        # Auto-append .NS for Indian stocks if not provided and not an index
+        if not ticker_symbol.endswith('.NS') and not ticker_symbol.endswith('.BO') and not ticker_symbol.startswith('^'):
+            ticker_symbol = f"{ticker_symbol}.NS"
+
         stock = yf.Ticker(ticker_symbol)
         info = stock.info
         
+        if not info or 'symbol' not in info:
+            raise ValueError("Yahoo Finance returned empty data for this ticker.")
+
         def fmt_pct(val):
             try: return f"{float(val) * 100:.2f}%"
             except (ValueError, TypeError): return "N/A"
@@ -112,10 +119,16 @@ def fetch_screener_metrics(ticker_symbol: str) -> dict:
             "Wall St Rating": format_rating(analyst_rating)
         }
     except Exception as e:
-        logger.error(f"Screener Metrics Error: {str(e)}")
-        return {"Status": "Data temporarily unavailable via YFinance"}
+        logger.error(f"Screener Metrics Error for {ticker_symbol}: {str(e)}")
+        # Return fallback dictionary so UI never goes blank
+        return {
+            "Status": "API Data Unavailable",
+            "Action": "Check ticker symbol",
+            "Market Cap": "N/A",
+            "Current Price": "N/A"
+        }
 
-# --- NEW: Instant Metrics Endpoint ---
+# --- Instant Metrics Endpoint ---
 @app.get("/api/metrics/{ticker}")
 async def get_metrics(ticker: str):
     """Fetches ONLY the financial ratios instantly for the frontend grid."""
