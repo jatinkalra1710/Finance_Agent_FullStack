@@ -115,6 +115,13 @@ def fetch_screener_metrics(ticker_symbol: str) -> dict:
         logger.error(f"Screener Metrics Error: {str(e)}")
         return {"Status": "Data temporarily unavailable via YFinance"}
 
+# --- NEW: Instant Metrics Endpoint ---
+@app.get("/api/metrics/{ticker}")
+async def get_metrics(ticker: str):
+    """Fetches ONLY the financial ratios instantly for the frontend grid."""
+    metrics = fetch_screener_metrics(ticker)
+    return {"metrics": metrics}
+
 # --- AI Tools ---
 @tool("advanced_web_search")
 def advanced_web_search(query: str) -> str:
