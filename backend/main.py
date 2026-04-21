@@ -55,7 +55,7 @@ async def health_check():
         "agents_online": 7
     }
 
-# --- Screener Metrics Function ---
+# --- Screener Metrics Function (EXPANDED) ---
 def fetch_screener_metrics(ticker_symbol: str) -> dict:
     """Fetches key financial ratios for the UI grid alongside the chart."""
     try:
@@ -68,6 +68,10 @@ def fetch_screener_metrics(ticker_symbol: str) -> dict:
             return f"{val:.2f}" if val is not None else "N/A"
         def fmt_cr(val):
             return f"₹{val / 10000000:,.2f} Cr" if val is not None else "N/A"
+        
+        def format_rating(rating):
+            if not rating: return "N/A"
+            return rating.replace('_', ' ').title()
 
         market_cap = info.get('marketCap')
         current_price = info.get('currentPrice') or info.get('regularMarketPrice')
@@ -80,24 +84,24 @@ def fetch_screener_metrics(ticker_symbol: str) -> dict:
         roe = info.get('returnOnEquity')
         pb_ratio = info.get('priceToBook')
         debt_to_equity = info.get('debtToEquity')
-        eps = info.get('trailingEps')
-        beta = info.get('beta')
-        revenue_growth = info.get('revenueGrowth')
+        
+        # NEW FEATURES ADDED HERE
+        fifty_ma = info.get('fiftyDayAverage')
+        two_hundred_ma = info.get('twoHundredDayAverage')
+        analyst_rating = info.get('recommendationKey')
 
         return {
             "Market Cap": fmt_cr(market_cap),
             "Current Price": f"₹{current_price}" if current_price else "N/A",
-            "52W High/Low": f"₹{high} / ₹{low}" if high and low else "N/A",
             "Stock P/E": fmt_num(pe),
             "Book Value": f"₹{book_value}" if book_value else "N/A",
-            "Price to Book": fmt_num(pb_ratio),
             "Dividend Yield": fmt_pct(dividend_yield),
             "ROCE (Est)": fmt_pct(roce),
             "ROE": fmt_pct(roe),
             "Debt to Equity": fmt_num(debt_to_equity),
-            "EPS (TTM)": f"₹{eps}" if eps else "N/A",
-            "Beta": fmt_num(beta),
-            "Rev Growth (YoY)": fmt_pct(revenue_growth)
+            "50-Day MA": f"₹{fmt_num(fifty_ma)}" if fifty_ma else "N/A",
+            "200-Day MA": f"₹{fmt_num(two_hundred_ma)}" if two_hundred_ma else "N/A",
+            "Wall St Consensus": format_rating(analyst_rating)
         }
     except Exception as e:
         logger.error(f"Failed to fetch metrics: {str(e)}")
@@ -171,152 +175,78 @@ async def analyze_stock(request: AnalyzeRequest):
         ticker = request.ticker
         company_name = request.company_name
         
-        # 1. Fetch metrics for the frontend sidebar immediately
         ui_metrics = fetch_screener_metrics(ticker)
 
-        # ========================================================================
-        # UNREDUCED, FULLY EXPANDED AGENT DEFINITIONS
-        # ========================================================================
         research_agent = Agent(
             role="Senior Global Market Research Analyst",
             goal=f"Gather, cross-verify, and compile an exhaustive financial and news dossier for {company_name} ({ticker}) as of {today}.",
-            backstory="""You are an elite, highly meticulous market researcher with 20 years of experience working at Goldman Sachs and Morgan Stanley. 
-            You do not accept surface-level data. You dig deep into financial statements, recent earnings calls, management changes, and macroeconomic 
-            trends affecting the specific stock. You cross-reference Yahoo Finance data with deep web searches to ensure 100% accuracy. 
-            If data is missing, you state it clearly rather than hallucinating.""",
+            backstory="""You are an elite, highly meticulous market researcher. You dig deep into financial statements, recent earnings calls, management changes, and macroeconomic trends. You cross-reference Yahoo Finance data with deep web searches to ensure 100% accuracy. If data is missing, you state it clearly rather than hallucinating.""",
             tools=[comprehensive_yfinance_data, advanced_web_search],
-            llm=MODEL, 
-            verbose=True
+            llm=MODEL, verbose=True
         )
         
         quant_agent = Agent(
             role="Lead Quantitative Financial Engineer",
             goal="Execute a rigorous fundamental analysis of balance sheets, cash flows, and valuation multiples.",
-            backstory="""You hold a PhD in Financial Engineering from MIT. You specialize in forensic accounting and deep-value investing. 
-            You look beyond the P/E ratio, diving into Price-to-Book, Debt-to-Equity, Free Cash Flow yield, ROE, and ROCE. 
-            You compare the company's current valuation against its historical averages and sector peers. You are purely numbers-driven, completely emotionless, 
-            and you highlight red flags in balance sheets instantly.""",
-            llm=MODEL, 
-            verbose=True
+            backstory="""You specialize in forensic accounting and deep-value investing. You look beyond the P/E ratio, diving into Price-to-Book, Debt-to-Equity, Free Cash Flow yield, ROE, and ROCE. You compare the company's current valuation against its historical averages and sector peers. You highlight red flags in balance sheets instantly.""",
+            llm=MODEL, verbose=True
         )
         
         technical_agent = Agent(
             role="Master Technical Analyst (CMT)",
             goal="Analyze price momentum, volume profiles, moving averages, and key chart patterns to determine entry/exit viability.",
-            backstory="""You are a Chartered Market Technician (CMT) who has managed algorithmic trading desks. You do not care about the company's business model; 
-            you only care about price action. You analyze 50-day and 200-day moving averages, RSI (Relative Strength Index), MACD, and volume anomalies. 
-            You identify strict support floors and resistance ceilings. You clearly state if a stock is technically overbought, oversold, or in consolidation.""",
-            llm=MODEL, 
-            verbose=True
+            backstory="""You are a Chartered Market Technician (CMT). You analyze 50-day and 200-day moving averages, RSI, MACD, and volume anomalies. You identify strict support floors and resistance ceilings. You clearly state if a stock is technically overbought, oversold, or in consolidation.""",
+            llm=MODEL, verbose=True
         )
         
         sentiment_agent = Agent(
             role="Director of Market Sentiment & Behavioral Economics",
             goal="Synthesize news tone, retail chatter, institutional moves, and broader market psychology into a clear sentiment rating.",
-            backstory="""You are a former hedge fund manager turned behavioral economist. You understand that markets are driven by fear and greed. 
-            You analyze the tone of recent news articles, recent analyst upgrades/downgrades, and institutional buying pressure. 
-            You synthesize this abstract data into a concrete sentiment rating (Extreme Bullish, Bullish, Neutral, Bearish, Extreme Bearish) 
-            and provide the psychological reasoning behind current price movements.""",
-            llm=MODEL, 
-            verbose=True
+            backstory="""You are a behavioral economist. You analyze the tone of recent news articles, analyst upgrades/downgrades, and institutional buying pressure. You synthesize this abstract data into a concrete sentiment rating (Extreme Bullish, Bullish, Neutral, Bearish, Extreme Bearish) and provide the psychological reasoning behind current price movements.""",
+            llm=MODEL, verbose=True
         )
         
         sector_agent = Agent(
             role="Global Sector & Macro-Economic Strategist",
             goal=f"Analyze {company_name}'s competitive moat, market share dynamics, and vulnerability to macroeconomic shifts.",
-            backstory="""You are a top-tier industry analyst who understands the big picture. You analyze the entire sector's headwinds and tailwinds. 
-            You evaluate the company's 'economic moat' (brand power, switching costs, network effects). You factor in inflation, interest rates, 
-            government regulations, and geopolitical tensions. You determine if the company is a market leader, a disruptor, or falling behind its peers.""",
-            llm=MODEL, 
-            verbose=True
+            backstory="""You understand the big picture. You analyze the entire sector's headwinds and tailwinds. You evaluate the company's 'economic moat' (brand power, switching costs, network effects). You factor in inflation, interest rates, government regulations, and geopolitical tensions.""",
+            llm=MODEL, verbose=True
         )
         
         risk_agent = Agent(
             role="Chief Risk & Compliance Officer",
             goal=f"Identify, categorize, and prioritize the top 5 absolute worst-case material risks for {company_name}.",
-            backstory="""You are a paranoid, highly effective Chief Risk Officer. Your job is to protect capital at all costs. You actively look for reasons NOT to invest. 
-            You evaluate liquidity crises, regulatory crackdowns, supply chain failures, key-man risks (CEO dependencies), and technological obsolescence. 
-            You assign a probability (Low/Med/High) and an impact severity (Low/Med/High) to every single risk you identify.""",
-            llm=MODEL, 
-            verbose=True
+            backstory="""You are a paranoid, highly effective Chief Risk Officer. Your job is to protect capital at all costs. You actively look for reasons NOT to invest. You evaluate liquidity crises, regulatory crackdowns, supply chain failures, key-man risks, and technological obsolescence. You assign a probability (Low/Med/High) and an impact severity (Low/Med/High) to every single risk.""",
+            llm=MODEL, verbose=True
         )
         
         strategist_agent = Agent(
             role="Chief Investment Officer (CIO)",
             goal="Synthesize the work of all 6 agents into a masterpiece Executive Investment Memo that is ready for a billionaire client.",
-            backstory="""You are the CIO of a massive institutional wealth management firm. You take the highly technical reports from your 6 underlying analysts 
-            and weave them together into a beautiful, easy-to-read, highly actionable Executive Memo. Your writing is crisp, authoritative, and perfectly formatted. 
-            You balance the bull case and the bear case perfectly, and you always end with a definitive conclusion on suitability.""",
-            llm=MODEL, 
-            verbose=True
+            backstory="""You are the CIO of a massive institutional wealth management firm. You take the highly technical reports from your 6 analysts and weave them together into a beautiful, easy-to-read, highly actionable Executive Memo. Your writing is crisp, authoritative, and perfectly formatted. You balance the bull case and the bear case perfectly, and you always end with a definitive conclusion on suitability.""",
+            llm=MODEL, verbose=True
         )
 
-        # ========================================================================
-        # UNREDUCED TASKS
-        # ========================================================================
         tasks = [
-            Task(
-                description=f"Gather all raw data for {company_name} ({ticker}). Execute a deep web search for the latest news from the past 7 days. Extract exact current pricing, market cap, volume, and 52-week extremes.", 
-                expected_output="A massive raw data dossier containing verified numbers and summarized news events.", 
-                agent=research_agent
-            ),
-            Task(
-                description=f"Using the data dossier, calculate the fundamental health of {company_name} ({ticker}). Evaluate the P/E, PEG, P/B, Debt/Equity, and Margins. Determine if it is undervalued, fairly valued, or overvalued.", 
-                expected_output="A heavily numerical fundamental analysis report detailing valuation and balance sheet health.", 
-                agent=quant_agent
-            ),
-            Task(
-                description=f"Analyze the price action of {company_name} ({ticker}). Identify exactly where the current price sits relative to its 52-week high/low. Establish clear support and resistance levels. Evaluate volume trends.", 
-                expected_output="A technical analysis brief detailing momentum, trend direction, and key price levels.", 
-                agent=technical_agent
-            ),
-            Task(
-                description=f"Read the news events gathered by the Research Agent for {company_name} ({ticker}). Determine the overall market sentiment. Is the media bullish or bearish? Provide a definitive sentiment classification.", 
-                expected_output="A psychological sentiment report classifying the stock's current momentum narrative.", 
-                agent=sentiment_agent
-            ),
-            Task(
-                description=f"Determine {company_name} ({ticker})'s position in its broader industry. Identify its top 2 competitors. Explain the current macroeconomic trends affecting this specific sector right now.", 
-                expected_output="An industry positioning report evaluating economic moats and sector tailwinds.", 
-                agent=sector_agent
-            ),
-            Task(
-                description=f"Review all findings and outline the top 3 to 5 catastrophic risks for {company_name} ({ticker}). Format them strictly with [Risk Name]: [Explanation] - Impact: [High/Med/Low], Probability: [High/Med/Low].", 
-                expected_output="A bulleted risk matrix prioritizing the most dangerous threats to the stock price.", 
-                agent=risk_agent
-            ),
+            Task(description=f"Gather all raw data for {company_name} ({ticker}). Extract exact current pricing, market cap, volume, and 52-week extremes.", expected_output="A massive raw data dossier.", agent=research_agent),
+            Task(description=f"Calculate fundamental health of {company_name} ({ticker}). Evaluate P/E, PEG, P/B, Debt/Equity, Margins.", expected_output="Fundamental analysis report.", agent=quant_agent),
+            Task(description=f"Analyze price action of {company_name} ({ticker}). Establish clear support and resistance levels.", expected_output="Technical analysis brief.", agent=technical_agent),
+            Task(description=f"Read news events for {company_name} ({ticker}). Provide a definitive sentiment classification.", expected_output="Psychological sentiment report.", agent=sentiment_agent),
+            Task(description=f"Determine {company_name} ({ticker})'s position in its industry. Identify top competitors and macro trends.", expected_output="Industry positioning report.", agent=sector_agent),
+            Task(description=f"Review findings and outline top 3 to 5 catastrophic risks for {company_name} ({ticker}).", expected_output="Risk matrix.", agent=risk_agent),
             Task(
                 description=f"""Write the final Executive Investment Memo for {company_name} ({ticker}).
-                You must format this beautifully using Markdown. Use Indian Rupees (₹). Include today's date: {today}.
-                
-                MUST STRICTLY FOLLOW THIS EXACT STRUCTURE:
+                MUST STRICTLY FOLLOW THIS EXACT STRUCTURE IN MARKDOWN (Use ₹):
                 # Executive Investment Brief: {company_name}
                 **Date:** {today} | **Ticker:** {ticker}
-                
                 ## 1. Executive Summary
-                (A powerful 3-sentence overview of the company's current status)
-                
-                ## 2. Investment Thesis
-                **🟢 The Bull Case:** (Why to buy)
-                **🔴 The Bear Case:** (Why to sell/avoid)
-                
+                ## 2. Investment Thesis (Bull Case 🟢 & Bear Case 🔴)
                 ## 3. Fundamental & Quantitative Health
-                (Synthesize the Quant Agent's findings. Discuss valuation multiples and debt)
-                
                 ## 4. Technical Outlook & Price Action
-                (Synthesize the Technical Agent's findings. Mention support/resistance)
-                
                 ## 5. Sector & Macro Environment
-                (Synthesize the Sector Agent's findings on competitors and industry trends)
-                
                 ## 6. Market Sentiment
-                (Synthesize the Sentiment Agent's findings)
-                
                 ## 7. Critical Risk Matrix
-                (List the top risks identified by the Risk Agent)
-                
                 ## 8. Final CIO Verdict & Suitability
-                (Your final authoritative conclusion. Who should hold this stock?)
                 """,
                 expected_output="A perfectly formatted, elite-level markdown investment memo.",
                 agent=strategist_agent
