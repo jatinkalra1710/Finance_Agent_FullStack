@@ -517,9 +517,21 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[700px]">
+                {/* ADVANCED CHART WITH DYNAMIC KEY FIX */}
                 <div className="lg:col-span-8 h-full">
                   <div className={`${cardBg} backdrop-blur-xl p-2 rounded-3xl shadow-sm border h-full overflow-hidden transition-colors duration-500`}>
-                    <AdvancedRealTimeChart theme={theme} symbol={getTradingViewSymbol(ticker)} autosize allow_symbol_change={false} hide_side_toolbar={false} interval="D" />
+                    <AdvancedRealTimeChart 
+                      key={`${theme}-${ticker || 'default'}`} 
+                      theme={theme} 
+                      symbol={getTradingViewSymbol(ticker)} 
+                      autosize 
+                      allow_symbol_change={false} 
+                      hide_side_toolbar={false} 
+                      backgroundColor="transparent" 
+                      interval="D" 
+                      range="12M"
+                      timezone="Asia/Kolkata"
+                    />
                   </div>
                 </div>
 
