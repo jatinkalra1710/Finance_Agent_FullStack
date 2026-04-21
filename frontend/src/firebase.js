@@ -16,6 +16,8 @@ const firebaseConfig = {
   measurementId: "G-DET8L4K10F"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+
+// THESE MUST HAVE 'export' IN FRONT OF THEM
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
