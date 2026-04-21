@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="AI Stock Analyst API - Enterprise Edition",
     description="7-Agent Institutional Intelligence Engine for deep equity research.",
-    version="2.0.0"
+    version="3.0.0"
 )
 
 # CORS Configuration for Frontend Deployment
@@ -62,7 +62,6 @@ def fetch_screener_metrics(ticker_symbol: str) -> dict:
         stock = yf.Ticker(ticker_symbol)
         info = stock.info
         
-        # Fortified formatters to prevent silent crashes
         def fmt_pct(val):
             try: return f"{float(val) * 100:.2f}%"
             except (ValueError, TypeError): return "N/A"
@@ -79,7 +78,6 @@ def fetch_screener_metrics(ticker_symbol: str) -> dict:
             if not rating or not isinstance(rating, str): return "N/A"
             return rating.replace('_', ' ').title()
 
-        # Safe extraction
         market_cap = info.get('marketCap')
         current_price = info.get('currentPrice', info.get('regularMarketPrice'))
         day_high = info.get('dayHigh', info.get('regularMarketDayHigh'))
@@ -190,7 +188,7 @@ async def analyze_stock(request: AnalyzeRequest):
         research_agent = Agent(
             role="Senior Global Market Research Analyst",
             goal=f"Gather, cross-verify, and compile an exhaustive financial and news dossier for {company_name} ({ticker}) as of {today}.",
-            backstory="""You are an elite, highly meticulous market researcher. You dig deep into financial statements, recent earnings calls, management changes, and macroeconomic trends. You cross-reference Yahoo Finance data with deep web searches to ensure 100% accuracy. If data is missing, you state it clearly rather than hallucinating.""",
+            backstory="You are an elite, highly meticulous market researcher. You dig deep into financial statements, recent earnings calls, management changes, and macroeconomic trends. You cross-reference Yahoo Finance data with deep web searches to ensure 100% accuracy. If data is missing, you state it clearly rather than hallucinating.",
             tools=[comprehensive_yfinance_data, advanced_web_search],
             llm=MODEL, verbose=True
         )
@@ -198,42 +196,42 @@ async def analyze_stock(request: AnalyzeRequest):
         quant_agent = Agent(
             role="Lead Quantitative Financial Engineer",
             goal="Execute a rigorous fundamental analysis of balance sheets, cash flows, and valuation multiples.",
-            backstory="""You specialize in forensic accounting and deep-value investing. You look beyond the P/E ratio, diving into Price-to-Book, Debt-to-Equity, Free Cash Flow yield, ROE, and ROCE. You compare the company's current valuation against its historical averages and sector peers. You highlight red flags in balance sheets instantly.""",
+            backstory="You specialize in forensic accounting and deep-value investing. You look beyond the P/E ratio, diving into Price-to-Book, Debt-to-Equity, Free Cash Flow yield, ROE, and ROCE. You compare the company's current valuation against its historical averages and sector peers. You highlight red flags in balance sheets instantly.",
             llm=MODEL, verbose=True
         )
         
         technical_agent = Agent(
             role="Master Technical Analyst (CMT)",
             goal="Analyze price momentum, volume profiles, moving averages, and key chart patterns to determine entry/exit viability.",
-            backstory="""You are a Chartered Market Technician (CMT). You analyze 50-day and 200-day moving averages, RSI, MACD, and volume anomalies. You identify strict support floors and resistance ceilings. You clearly state if a stock is technically overbought, oversold, or in consolidation.""",
+            backstory="You are a Chartered Market Technician (CMT). You analyze 50-day and 200-day moving averages, RSI, MACD, and volume anomalies. You identify strict support floors and resistance ceilings. You clearly state if a stock is technically overbought, oversold, or in consolidation.",
             llm=MODEL, verbose=True
         )
         
         sentiment_agent = Agent(
             role="Director of Market Sentiment & Behavioral Economics",
             goal="Synthesize news tone, retail chatter, institutional moves, and broader market psychology into a clear sentiment rating.",
-            backstory="""You are a behavioral economist. You analyze the tone of recent news articles, analyst upgrades/downgrades, and institutional buying pressure. You synthesize this abstract data into a concrete sentiment rating (Extreme Bullish, Bullish, Neutral, Bearish, Extreme Bearish) and provide the psychological reasoning behind current price movements.""",
+            backstory="You are a behavioral economist. You analyze the tone of recent news articles, analyst upgrades/downgrades, and institutional buying pressure. You synthesize this abstract data into a concrete sentiment rating (Extreme Bullish, Bullish, Neutral, Bearish, Extreme Bearish) and provide the psychological reasoning behind current price movements.",
             llm=MODEL, verbose=True
         )
         
         sector_agent = Agent(
             role="Global Sector & Macro-Economic Strategist",
             goal=f"Analyze {company_name}'s competitive moat, market share dynamics, and vulnerability to macroeconomic shifts.",
-            backstory="""You understand the big picture. You analyze the entire sector's headwinds and tailwinds. You evaluate the company's 'economic moat' (brand power, switching costs, network effects). You factor in inflation, interest rates, government regulations, and geopolitical tensions.""",
+            backstory="You understand the big picture. You analyze the entire sector's headwinds and tailwinds. You evaluate the company's 'economic moat' (brand power, switching costs, network effects). You factor in inflation, interest rates, government regulations, and geopolitical tensions.",
             llm=MODEL, verbose=True
         )
         
         risk_agent = Agent(
             role="Chief Risk & Compliance Officer",
             goal=f"Identify, categorize, and prioritize the top 5 absolute worst-case material risks for {company_name}.",
-            backstory="""You are a paranoid, highly effective Chief Risk Officer. Your job is to protect capital at all costs. You actively look for reasons NOT to invest. You evaluate liquidity crises, regulatory crackdowns, supply chain failures, key-man risks, and technological obsolescence. You assign a probability (Low/Med/High) and an impact severity (Low/Med/High) to every single risk.""",
+            backstory="You are a paranoid, highly effective Chief Risk Officer. Your job is to protect capital at all costs. You actively look for reasons NOT to invest. You evaluate liquidity crises, regulatory crackdowns, supply chain failures, key-man risks, and technological obsolescence. You assign a probability (Low/Med/High) and an impact severity (Low/Med/High) to every single risk.",
             llm=MODEL, verbose=True
         )
         
         strategist_agent = Agent(
             role="Chief Investment Officer (CIO)",
             goal="Synthesize the work of all 6 agents into a masterpiece Executive Investment Memo that is ready for a billionaire client.",
-            backstory="""You are the CIO of a massive institutional wealth management firm. You take the highly technical reports from your 6 analysts and weave them together into a beautiful, easy-to-read, highly actionable Executive Memo. Your writing is crisp, authoritative, and perfectly formatted. You balance the bull case and the bear case perfectly, and you always end with a definitive conclusion on suitability.""",
+            backstory="You are the CIO of a massive institutional wealth management firm. You take the highly technical reports from your 6 analysts and weave them together into a beautiful, easy-to-read, highly actionable Executive Memo. Your writing is crisp, authoritative, and perfectly formatted. You balance the bull case and the bear case perfectly, and you always end with a definitive conclusion on suitability.",
             llm=MODEL, verbose=True
         )
 
