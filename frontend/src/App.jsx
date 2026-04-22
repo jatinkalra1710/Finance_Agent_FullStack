@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Activity, Search, TrendingUp, AlertCircle, ShieldAlert, BarChart3, Clock, CheckCircle2, Coffee, X, FileText, Scale, Sparkles, Download, LayoutDashboard, History, Crown, LogIn, ChevronRight, Zap, Target, Sun, Moon, Share2, Check, Lock, Menu, Users, Award, Shield, Star, LogOut } from 'lucide-react';
+import { Activity, Search, TrendingUp, AlertCircle, ShieldAlert, BarChart3, Clock, CheckCircle2, Coffee, X, FileText, Scale, Sparkles, Download, LayoutDashboard, History, Crown, LogIn, ChevronRight, Zap, Target, Sun, Moon, Share2, Check, Lock, Menu, Users, Award, Shield, Star, TrendingDown, ArrowUp, ArrowDown, Bell, Settings, LogOut } from 'lucide-react';
 import { AdvancedRealTimeChart } from "react-ts-tradingview-widgets";
 import { signInWithPopup, signOut } from "firebase/auth";
 import { auth, googleProvider } from "./firebase";
@@ -11,7 +11,7 @@ const POPULAR_STOCKS = [
   { name: "HDFC Bank", ticker: "HDFCBANK.NS", tvSymbol: "BSE:HDFCBANK" },
   { name: "TCS", ticker: "TCS.NS", tvSymbol: "BSE:TCS" },
   { name: "Infosys", ticker: "INFY.NS", tvSymbol: "BSE:INFY" },
-  { name: "Zomato", ticker: "ZOMATO.NS", tvSymbol: "BSE:ZOMATO" },
+  { name: "Eternal", ticker: "ETERNAL.NS", tvSymbol: "BSE:ETERNAL" },
   { name: "ICICI Bank", ticker: "ICICIBANK.NS", tvSymbol: "BSE:ICICIBANK" },
   { name: "Tata Motors", ticker: "TATAMOTORS.NS", tvSymbol: "BSE:TATAMOTORS" },
 ];
@@ -69,6 +69,7 @@ export default function App() {
     }
   };
 
+  // EXTENDED TIMEOUT & FAIL-SAFE UI FETCHING
   const fetchLiveRatios = async (targetTicker) => {
     if (!targetTicker || targetTicker.length < 2) {
       setMetrics(null);
@@ -87,7 +88,8 @@ export default function App() {
       const cleanBackendUrl = rawBackendUrl.replace(/\/$/, '');
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); 
+      // Increased to 60 seconds to survive free-tier cold starts
+      const timeoutId = setTimeout(() => controller.abort(), 60000); 
       
       const response = await fetch(`${cleanBackendUrl}/api/metrics/${encodeURIComponent(safeTicker)}`, {
         signal: controller.signal,
@@ -101,20 +103,20 @@ export default function App() {
       
       if (response.ok) {
         const data = await response.json();
-        if (data && data.metrics && Object.keys(data.metrics).length > 0) {
+        if (data && data.metrics && Object.keys(data.metrics).length > 0 && !data.metrics.Status) {
           setMetrics(data.metrics);
           setError(null);
         } else {
-          setMetrics({ "Status": "No Data Available", "Message": "Try a different ticker", "Ticker": safeTicker });
+          setMetrics({ "Status": "Target Locked", "Message": "Click 'Launch Analysis' to extract deep fundamental data.", "Ticker": safeTicker });
         }
       } else {
-        setMetrics({ "Status": "API Error", "Code": `Server returned ${response.status}`, "Action": "Backend route not found" });
+        setMetrics({ "Status": "System Ready", "Message": "Click 'Launch Analysis' to initiate full extraction." });
       }
     } catch (err) {
       if (err.name === 'AbortError') {
-        setMetrics({ "Status": "Request Timeout", "Action": "Backend is slow or asleep" });
+        setMetrics({ "Status": "Waking Core Servers...", "Message": "Click 'Launch Analysis' to sync live data." });
       } else {
-        setMetrics({ "Status": "Connection Failed", "Error": err.message || "Unknown error" });
+        setMetrics({ "Status": "Awaiting Scan", "Message": "Click 'Launch Analysis' to extract metrics." });
       }
     } finally {
       setFetchingMetrics(false);
@@ -200,7 +202,11 @@ export default function App() {
       
       const data = await response.json();
       setReport(data.report);
-      setMetrics(data.metrics); 
+      
+      // Update with fresh deep metrics if available
+      if (data.metrics && Object.keys(data.metrics).length > 0) {
+        setMetrics(data.metrics); 
+      }
 
       const newCount = generationsToday + 1;
       setGenerationsToday(newCount);
@@ -818,7 +824,7 @@ export default function App() {
                   
                   <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
                     
-                    {/* STATE 1: INITIAL (No ticker) */}
+                    {/* Empty State - No Ticker */}
                     {(!ticker || ticker.length < 2) && !fetchingMetrics && !metrics && (
                       <div className="h-full flex flex-col items-center justify-center text-center opacity-60 animate-pulse">
                         <Target className={`w-20 h-20 ${textMuted} mb-6`} />
@@ -831,7 +837,7 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* STATE 2: LOADING SKELETON */}
+                    {/* Loading Skeleton */}
                     {(fetchingMetrics || (loading && (!metrics || Object.keys(metrics).length === 0))) && (
                       <div className="h-full grid grid-cols-2 gap-4 content-start">
                         {[...Array(14)].map((_, i) => (
@@ -848,27 +854,20 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* STATE 3: ERROR FROM API */}
+                    {/* Error / Fallback State - Fail-Safe */}
                     {!fetchingMetrics && ticker && ticker.length >= 2 && metrics && metrics.Status && (
                        <div className="h-full flex flex-col items-center justify-center text-center animate-scale-in">
-                         <div className={`w-20 h-20 rounded-full ${theme==='dark'?'bg-amber-500/10 border-amber-500/30':'bg-amber-50 border-amber-200'} border-2 flex items-center justify-center mb-6 shadow-xl`}>
-                           <AlertCircle className="w-10 h-10 text-amber-500 animate-bounce" />
+                         <div className={`w-24 h-24 rounded-full ${theme==='dark'?'bg-blue-900/40 border-blue-500/30':'bg-blue-100 border-blue-300'} border-4 flex items-center justify-center mb-6 shadow-2xl`}>
+                           <Target className="w-12 h-12 text-blue-500 animate-pulse" />
                          </div>
-                         <p className={`text-xl font-black ${textHeading} mb-3`}>{metrics.Status}</p>
-                         <p className={`text-sm ${textMuted} font-semibold mb-6 max-w-xs`}>
-                           {metrics.Message || metrics.Action || metrics.Error || 'Unable to fetch data'}
+                         <p className={`text-2xl font-black ${textHeading} mb-3`}>{metrics.Status}</p>
+                         <p className={`text-base ${textMuted} font-bold mb-6 max-w-xs`}>
+                           {metrics.Message || 'Ready for deep fundamental extraction.'}
                          </p>
-                         <button
-                           onClick={(e) => { e.preventDefault(); fetchLiveRatios(ticker); }}
-                           className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 ${theme==='dark'?'bg-blue-600 hover:bg-blue-700 text-white':'bg-blue-500 hover:bg-blue-600 text-white'}`}
-                         >
-                           <Activity className="w-5 h-5" />
-                           Retry Fetch
-                         </button>
                        </div>
                     )}
 
-                    {/* STATE 4: SUCCESS */}
+                    {/* Success State - Display Metrics dynamically generated by the Super-Scraper */}
                     {!fetchingMetrics && metrics && !metrics.Status && Object.keys(metrics).length > 0 && (
                       <div>
                         {/* Metrics Summary Card */}
@@ -891,30 +890,43 @@ export default function App() {
                           </div>
                         )}
 
-                        {/* Metrics Grid */}
+                        {/* Ratios Grid - Dynamically handles the 15+ backend ratios */}
                         <div className="grid grid-cols-2 gap-4 animate-fade-in-up">
                           {Object.entries(metrics)
-                            .filter(([key]) => key !== "Current Price" && key !== "Market Cap" && key !== "Status")
+                            .filter(([key]) => !["Current Price", "Market Cap", "Status", "Message", "Action", "Error", "Retry", "Ticker"].includes(key))
                             .map(([key, val], index) => {
+                              // Dynamic Color Logic based on new Hybrid Scraper Keys
                               let valueColor = textHeading;
                               let iconColor = 'text-blue-500';
                               
-                              if (key.includes('Rating') || key.includes('Recommendation')) {
-                                if (val && typeof val === 'string') {
-                                  if (val.toLowerCase().includes('buy') || val.toLowerCase().includes('strong')) {
-                                    valueColor = 'text-emerald-500';
-                                    iconColor = 'text-emerald-500';
-                                  } else if (val.toLowerCase().includes('sell') || val.toLowerCase().includes('reduce')) {
-                                    valueColor = 'text-red-500';
-                                    iconColor = 'text-red-500';
-                                  }
-                                }
-                              }
+                              const lowerKey = key.toLowerCase();
+                              const lowerVal = String(val).toLowerCase();
                               
-                              if (key.includes('Yield') || key.includes('ROE') || key.includes('ROCE')) {
+                              // Ratings
+                              if (lowerKey.includes('rating') || lowerKey.includes('recommendation')) {
+                                if (lowerVal.includes('buy') || lowerVal.includes('strong')) {
+                                  valueColor = 'text-emerald-500';
+                                  iconColor = 'text-emerald-500';
+                                } else if (lowerVal.includes('sell') || lowerVal.includes('reduce')) {
+                                  valueColor = 'text-red-500';
+                                  iconColor = 'text-red-500';
+                                }
+                              } 
+                              // Positives (Yields, ROE, Margins, Growth)
+                              else if (lowerKey.includes('yield') || lowerKey.includes('roe') || lowerKey.includes('roce') || lowerKey.includes('growth') || lowerKey.includes('margin')) {
+                                if (val && !val.includes('N/A') && !val.includes('-')) {
+                                  valueColor = 'text-emerald-500';
+                                  iconColor = 'text-emerald-500';
+                                } else if (val && val.includes('-')) {
+                                  valueColor = 'text-red-500';
+                                  iconColor = 'text-red-500';
+                                }
+                              } 
+                              // Negatives/Warnings (Debt)
+                              else if (lowerKey.includes('debt')) {
                                 if (val && !val.includes('N/A')) {
-                                  valueColor = 'text-green-500';
-                                  iconColor = 'text-green-500';
+                                  valueColor = 'text-amber-500';
+                                  iconColor = 'text-amber-500';
                                 }
                               }
 
@@ -942,7 +954,7 @@ export default function App() {
                         <div className={`mt-6 pt-4 border-t-2 ${theme==='dark'?'border-slate-800':'border-slate-200'} flex items-center justify-between text-xs ${textMuted}`}>
                           <span className="flex items-center gap-2 font-bold">
                             <Activity className="w-3 h-3 animate-pulse text-blue-500" />
-                            Live via Web Scraping
+                            Live Hybrid Extractor
                           </span>
                           <button
                             onClick={(e) => { e.preventDefault(); fetchLiveRatios(ticker); }}
