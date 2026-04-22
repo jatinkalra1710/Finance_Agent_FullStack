@@ -56,11 +56,11 @@ async def health_check():
         "version": "4.1.0"
     }
 
-# --- ENHANCED Screener Metrics Function ---
+# --- BULLETPROOF Screener Metrics Function ---
 def fetch_screener_metrics(ticker_symbol: str) -> dict:
     """
-    Fetches comprehensive financial ratios with bulletproof error handling.
-    Returns a populated dict even if API fails.
+    Fetches comprehensive financial ratios using fast_info and history 
+    to bypass Yahoo Finance's strict .info bot blockers.
     """
     try:
         logger.info(f"Fetching metrics for: {ticker_symbol}")
@@ -70,152 +70,100 @@ def fetch_screener_metrics(ticker_symbol: str) -> dict:
             ticker_symbol = f"{ticker_symbol}.NS"
 
         stock = yf.Ticker(ticker_symbol)
-        info = stock.info
         
-        # Validate we got data
-        if not info or len(info) < 5:
-            logger.warning(f"Insufficient data from yfinance for {ticker_symbol}")
-            raise ValueError("Yahoo Finance returned minimal data")
+        # Use fast_info and history as they are rarely blocked by Yahoo
+        fast_info = stock.fast_info
+        hist = stock.history(period="1mo")
+
+        # We TRY to get info, but we do NOT rely on it
+        try:
+            info = stock.info
+        except Exception:
+            info = {}
 
         # Helper formatters with null safety
         def fmt_pct(val):
-            try: 
-                if val is None: return "N/A"
-                return f"{float(val) * 100:.2f}%"
+            try: return f"{float(val) * 100:.2f}%" if val else "N/A"
             except: return "N/A"
             
         def fmt_num(val):
-            try: 
-                if val is None: return "N/A"
-                return f"{float(val):.2f}"
+            try: return f"{float(val):.2f}" if val else "N/A"
             except: return "N/A"
             
         def fmt_cr(val):
-            try: 
-                if val is None: return "N/A"
-                return f"₹{float(val) / 10000000:,.2f} Cr"
+            try: return f"₹{float(val) / 10000000:,.2f} Cr" if val else "N/A"
             except: return "N/A"
 
         def fmt_price(val):
-            try:
-                if val is None: return "N/A"
-                return f"₹{float(val):,.2f}"
+            try: return f"₹{float(val):,.2f}" if val else "N/A"
             except: return "N/A"
 
-        def format_rating(rating):
-            if not rating or not isinstance(rating, str): return "Hold"
-            return rating.replace('_', ' ').title()
+        metrics_dict = {}
 
-        # Extract all possible metrics with fallbacks
-        market_cap = info.get('marketCap')
-        current_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose')
-        day_high = info.get('dayHigh') or info.get('regularMarketDayHigh')
-        day_low = info.get('dayLow') or info.get('regularMarketDayLow')
-        high_52 = info.get('fiftyTwoWeekHigh')
-        low_52 = info.get('fiftyTwoWeekLow')
-        
-        # Valuation metrics
-        pe = info.get('trailingPE') or info.get('forwardPE')
-        pb_ratio = info.get('priceToBook')
-        ps_ratio = info.get('priceToSalesTrailing12Months')
-        
-        # Profitability
-        dividend_yield = info.get('dividendYield') or info.get('trailingAnnualDividendYield')
-        profit_margin = info.get('profitMargins')
-        operating_margin = info.get('operatingMargins')
-        
-        # Returns
-        roe = info.get('returnOnEquity')
-        roa = info.get('returnOnAssets')
-        
-        # Debt
-        debt_to_equity = info.get('debtToEquity')
-        current_ratio = info.get('currentRatio')
-        
-        # Earnings
-        eps = info.get('trailingEps')
-        earnings_growth = info.get('earningsQuarterlyGrowth')
-        revenue_growth = info.get('revenueGrowth')
-        
-        # Technical
-        fifty_ma = info.get('fiftyDayAverage')
-        two_hundred_ma = info.get('twoHundredDayAverage')
-        beta = info.get('beta')
-        
-        # Analyst
-        target_price = info.get('targetMeanPrice')
-        analyst_rating = info.get('recommendationKey')
-        num_analysts = info.get('numberOfAnalystOpinions')
+        # 1. Price & Volume (100% Reliable via History)
+        if not hist.empty:
+            current_price = hist['Close'].iloc[-1]
+            day_high = hist['High'].iloc[-1]
+            day_low = hist['Low'].iloc[-1]
+            volume = hist['Volume'].iloc[-1]
+            
+            metrics_dict["Current Price"] = fmt_price(current_price)
+            metrics_dict["Day Range"] = f"{fmt_price(day_low)} - {fmt_price(day_high)}"
+            metrics_dict["Today's Volume"] = f"{int(volume):,}" if volume else "N/A"
 
-        # Volume
-        avg_volume = info.get('averageVolume')
-        volume = info.get('volume') or info.get('regularMarketVolume')
+        # 2. Fast Info (Highly Reliable)
+        try:
+            if hasattr(fast_info, 'market_cap') and fast_info.market_cap:
+                metrics_dict["Market Cap"] = fmt_cr(fast_info.market_cap)
+            if hasattr(fast_info, 'year_high') and hasattr(fast_info, 'year_low'):
+                metrics_dict["52-Week Range"] = f"{fmt_price(fast_info.year_low)} - {fmt_price(fast_info.year_high)}"
+            if hasattr(fast_info, 'fifty_day_average') and fast_info.fifty_day_average:
+                metrics_dict["50-Day MA"] = fmt_price(fast_info.fifty_day_average)
+            if hasattr(fast_info, 'two_hundred_day_average') and fast_info.two_hundred_day_average:
+                metrics_dict["200-Day MA"] = fmt_price(fast_info.two_hundred_day_average)
+        except Exception as e:
+            logger.warning(f"Fast info extraction failed: {str(e)}")
 
-        # Build comprehensive metrics dict
-        metrics_dict = {
-            "Market Cap": fmt_cr(market_cap),
-            "Current Price": fmt_price(current_price),
-            "Day Range": f"{fmt_price(day_low)} - {fmt_price(day_high)}" if day_high and day_low else "N/A",
-            "52-Week Range": f"{fmt_price(low_52)} - {fmt_price(high_52)}" if high_52 and low_52 else "N/A",
+        # 3. Standard Info (Flaky, often blocked)
+        if info:
+            pe = info.get('trailingPE') or info.get('forwardPE')
+            if pe: metrics_dict["P/E Ratio"] = fmt_num(pe)
             
-            # Valuation
-            "P/E Ratio": fmt_num(pe),
-            "P/B Ratio": fmt_num(pb_ratio),
-            "P/S Ratio": fmt_num(ps_ratio),
+            pb = info.get('priceToBook')
+            if pb: metrics_dict["P/B Ratio"] = fmt_num(pb)
             
-            # Profitability
-            "Profit Margin": fmt_pct(profit_margin),
-            "Operating Margin": fmt_pct(operating_margin),
-            "Dividend Yield": fmt_pct(dividend_yield),
+            roe = info.get('returnOnEquity')
+            if roe: metrics_dict["ROE"] = fmt_pct(roe)
             
-            # Returns
-            "ROE": fmt_pct(roe),
-            "ROA": fmt_pct(roa),
+            div = info.get('dividendYield') or info.get('trailingAnnualDividendYield')
+            if div: metrics_dict["Dividend Yield"] = fmt_pct(div)
             
-            # Financial Health
-            "Debt/Equity": fmt_num(debt_to_equity),
-            "Current Ratio": fmt_num(current_ratio),
-            
-            # Growth
-            "EPS (TTM)": fmt_price(eps),
-            "Earnings Growth": fmt_pct(earnings_growth),
-            "Revenue Growth": fmt_pct(revenue_growth),
-            
-            # Technical
-            "50-Day MA": fmt_price(fifty_ma),
-            "200-Day MA": fmt_price(two_hundred_ma),
-            "Beta": fmt_num(beta),
-            
-            # Analyst
-            "Target Price": fmt_price(target_price),
-            "Analyst Rating": format_rating(analyst_rating),
-            "Analysts Covering": str(num_analysts) if num_analysts else "N/A",
-            
-            # Volume
-            "Avg Volume": f"{int(avg_volume):,}" if avg_volume else "N/A",
-            "Today's Volume": f"{int(volume):,}" if volume else "N/A",
-        }
+            debt = info.get('debtToEquity')
+            if debt: metrics_dict["Debt/Equity"] = fmt_num(debt)
 
-        # Filter out completely empty rows (all N/A)
-        metrics_dict = {k: v for k, v in metrics_dict.items() if v != "N/A"}
-        
-        # Ensure we have at least some data
-        if len(metrics_dict) < 3:
-            logger.warning(f"Very limited data for {ticker_symbol}: {metrics_dict}")
-            raise ValueError("Insufficient metrics data")
+            eps = info.get('trailingEps')
+            if eps: metrics_dict["EPS (TTM)"] = fmt_price(eps)
+
+            target = info.get('targetMeanPrice')
+            if target: metrics_dict["Target Price"] = fmt_price(target)
+            
+            rating = info.get('recommendationKey')
+            if rating: metrics_dict["Analyst Rating"] = str(rating).replace('_', ' ').title()
+
+        # If literally nothing worked, trigger error
+        if len(metrics_dict) < 2:
+            raise ValueError("Insufficient metrics data retrieved")
 
         logger.info(f"Successfully fetched {len(metrics_dict)} metrics for {ticker_symbol}")
         return metrics_dict
         
     except Exception as e:
         logger.error(f"Screener Metrics Error for {ticker_symbol}: {str(e)}")
-        
         # Return user-friendly error instead of empty dict
         return {
             "Status": "Data Unavailable",
-            "Ticker": ticker_symbol,
-            "Action": "Verify symbol or try again",
-            "Error": "API timeout or invalid ticker"
+            "Message": "Yahoo Finance is blocking requests for this ticker.",
+            "Action": "Check symbol or try again"
         }
 
 # --- Instant Metrics Endpoint ---
@@ -237,7 +185,6 @@ async def get_metrics(ticker: str):
         }
     except Exception as e:
         logger.error(f"Metrics endpoint error: {str(e)}")
-        
         # Return error in friendly format
         return {
             "success": False,
@@ -321,7 +268,7 @@ async def analyze_stock(request: AnalyzeRequest):
         # Fetch UI metrics
         ui_metrics = fetch_screener_metrics(ticker)
 
-        # Create 7 AI Agents (keeping your original implementation)
+        # Create 7 AI Agents
         research_agent = Agent(
             role="Senior Global Market Research Analyst",
             goal=f"Gather comprehensive data for {company_name} ({ticker}) as of {today}",
