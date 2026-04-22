@@ -72,6 +72,7 @@ export default function App() {
     }
   };
 
+  // Instant Metrics Fetching - 404 DOUBLE-SLASH FIX APPLIED
   const fetchLiveRatios = async (targetTicker) => {
     if (!targetTicker || targetTicker.length < 2) {
       setMetrics(null);
@@ -86,21 +87,59 @@ export default function App() {
     }
 
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      const response = await fetch(`${backendUrl}/api/metrics/${encodeURIComponent(safeTicker)}`);
+      let rawBackendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      // Strip any trailing slashes from the environment variable to prevent 404 errors
+      const cleanBackendUrl = rawBackendUrl.replace(/\/$/, '');
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); 
+      
+      const response = await fetch(`${cleanBackendUrl}/api/metrics/${encodeURIComponent(safeTicker)}`, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      clearTimeout(timeoutId);
       
       if (response.ok) {
         const data = await response.json();
+        
         if (data && data.metrics && Object.keys(data.metrics).length > 0) {
           setMetrics(data.metrics);
+          setError(null);
         } else {
-          setMetrics({ "Status": "Data Unavailable", "Message": "No data returned from backend." });
+          setMetrics({ 
+            "Status": "No Data Available",
+            "Message": "Try a different ticker",
+            "Ticker": safeTicker
+          });
         }
       } else {
-        setMetrics({ "Status": "API Error", "Message": `Server returned ${response.status}` });
+        setMetrics({ 
+          "Status": "API Error",
+          "Code": `Server returned ${response.status}`,
+          "Action": "Check if backend is deployed!"
+        });
       }
     } catch (err) {
-      setMetrics({ "Status": "Connection Failed", "Message": err.message });
+      console.error("Metrics fetch failed:", err);
+      
+      if (err.name === 'AbortError') {
+        setMetrics({ 
+          "Status": "Request Timeout",
+          "Action": "Backend is asleep or slow",
+          "Retry": "Try again"
+        });
+      } else {
+        setMetrics({ 
+          "Status": "Connection Failed",
+          "Error": err.message || "Unknown error",
+          "Action": "Check backend URL"
+        });
+      }
     } finally {
       setFetchingMetrics(false);
     }
@@ -111,7 +150,10 @@ export default function App() {
       setMetrics(null);
       return;
     }
-    const timer = setTimeout(() => fetchLiveRatios(ticker), 800); 
+    const timer = setTimeout(() => {
+      fetchLiveRatios(ticker);
+    }, 800); 
+    
     return () => clearTimeout(timer);
   }, [ticker]);
 
@@ -169,8 +211,10 @@ export default function App() {
     setActiveTab('dashboard');
 
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      const response = await fetch(`${backendUrl}/api/analyze`, {
+      let rawBackendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const cleanBackendUrl = rawBackendUrl.replace(/\/$/, '');
+
+      const response = await fetch(`${cleanBackendUrl}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticker: ticker.toUpperCase(), company_name: companyName || ticker }),
@@ -180,11 +224,7 @@ export default function App() {
       
       const data = await response.json();
       setReport(data.report);
-      
-      // If the analyze endpoint brings back fresh UI metrics, merge them safely
-      if (data.metrics && Object.keys(data.metrics).length > 0) {
-        setMetrics(data.metrics); 
-      }
+      setMetrics(data.metrics); 
 
       const newCount = generationsToday + 1;
       setGenerationsToday(newCount);
@@ -267,12 +307,6 @@ export default function App() {
   const inputBg = theme === 'dark' ? 'bg-slate-950/50 border-slate-700 text-white focus:ring-blue-500' : 'bg-white border-slate-300 text-slate-900 focus:ring-blue-500';
   const textMuted = theme === 'dark' ? 'text-slate-400' : 'text-slate-600';
   const textHeading = theme === 'dark' ? 'text-white' : 'text-slate-900';
-
-  // MATHEMATHICALLY PERFECT MUTUALLY EXCLUSIVE STATES
-  const showInitial = !ticker && !fetchingMetrics && !loading && (!metrics || Object.keys(metrics).length === 0);
-  const showSkeleton = fetchingMetrics || (loading && (!metrics || Object.keys(metrics).length === 0));
-  const showError = !showSkeleton && ticker && metrics && metrics.Status;
-  const showSuccess = !showSkeleton && !showError && metrics && Object.keys(metrics).length > 0;
 
   return (
     <div className={`flex h-screen font-sans overflow-hidden relative selection:bg-blue-500/30 transition-all duration-700 ${baseBg}`}>
@@ -779,7 +813,7 @@ export default function App() {
                 <div className="lg:col-span-8 h-full animate-slide-up">
                   <div className={`${cardBg} backdrop-blur-3xl p-3 rounded-3xl shadow-2xl border-2 ${theme==='dark'?'border-slate-700':'border-slate-200'} h-full overflow-hidden transition-all duration-500`}>
                     <AdvancedRealTimeChart 
-                      key={theme}
+                      key={ticker || "default"}
                       theme={theme} 
                       symbol={getTradingViewSymbol(ticker)} 
                       autosize 
@@ -817,7 +851,7 @@ export default function App() {
                   <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
                     
                     {/* STATE 1: INITIAL (No ticker) */}
-                    {showInitial && (
+                    {(!ticker || ticker.length < 2) && !fetchingMetrics && !metrics && (
                       <div className="h-full flex flex-col items-center justify-center text-center opacity-60 animate-pulse">
                         <Target className={`w-20 h-20 ${textMuted} mb-6`} />
                         <p className={`text-lg font-black ${textHeading} mb-2`}>
@@ -830,7 +864,7 @@ export default function App() {
                     )}
 
                     {/* STATE 2: LOADING SKELETON */}
-                    {showSkeleton && (
+                    {(fetchingMetrics || (loading && (!metrics || Object.keys(metrics).length === 0))) && (
                       <div className="h-full grid grid-cols-2 gap-4 content-start">
                         {[...Array(14)].map((_, i) => (
                           <div 
@@ -847,17 +881,17 @@ export default function App() {
                     )}
 
                     {/* STATE 3: ERROR FROM API */}
-                    {showError && (
+                    {!fetchingMetrics && ticker && ticker.length >= 2 && metrics && metrics.Status && (
                        <div className="h-full flex flex-col items-center justify-center text-center animate-scale-in">
                          <div className={`w-20 h-20 rounded-full ${theme==='dark'?'bg-amber-500/10 border-amber-500/30':'bg-amber-50 border-amber-200'} border-2 flex items-center justify-center mb-6 shadow-xl`}>
                            <AlertCircle className="w-10 h-10 text-amber-500 animate-bounce" />
                          </div>
-                         <p className={`text-xl font-black ${textHeading} mb-3`}>{metrics.Status || "Data Unavailable"}</p>
+                         <p className={`text-xl font-black ${textHeading} mb-3`}>{metrics.Status}</p>
                          <p className={`text-sm ${textMuted} font-semibold mb-6 max-w-xs`}>
                            {metrics.Message || metrics.Action || 'Unable to fetch data for this ticker'}
                          </p>
                          <button
-                           onClick={() => fetchLiveRatios(ticker)}
+                           onClick={(e) => { e.preventDefault(); fetchLiveRatios(ticker); }}
                            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 ${theme==='dark'?'bg-blue-600 hover:bg-blue-700 text-white':'bg-blue-500 hover:bg-blue-600 text-white'}`}
                          >
                            <Activity className="w-5 h-5" />
@@ -867,9 +901,8 @@ export default function App() {
                     )}
 
                     {/* STATE 4: SUCCESS */}
-                    {showSuccess && (
+                    {!fetchingMetrics && metrics && !metrics.Status && Object.keys(metrics).length > 0 && (
                       <div>
-                        {/* Metrics Summary Card */}
                         {metrics["Current Price"] && (
                           <div className={`${theme==='dark'?'bg-gradient-to-br from-blue-900/30 to-purple-900/20 border-blue-500/30':'bg-gradient-to-br from-blue-50 to-purple-50 border-blue-200'} border-2 rounded-2xl p-6 mb-6 animate-fade-in-up shadow-xl`}>
                             <div className="flex items-center justify-between mb-4">
@@ -889,7 +922,6 @@ export default function App() {
                           </div>
                         )}
 
-                        {/* Metrics Grid */}
                         <div className="grid grid-cols-2 gap-4 animate-fade-in-up">
                           {Object.entries(metrics)
                             .filter(([key]) => key !== "Current Price" && key !== "Market Cap" && key !== "Status")
@@ -936,14 +968,13 @@ export default function App() {
                             })}
                         </div>
 
-                        {/* Data Source Footer */}
                         <div className={`mt-6 pt-4 border-t-2 ${theme==='dark'?'border-slate-800':'border-slate-200'} flex items-center justify-between text-xs ${textMuted}`}>
                           <span className="flex items-center gap-2 font-bold">
                             <Activity className="w-3 h-3 animate-pulse text-blue-500" />
                             Real-time via YFinance
                           </span>
                           <button
-                            onClick={() => fetchLiveRatios(ticker)}
+                            onClick={(e) => { e.preventDefault(); fetchLiveRatios(ticker); }}
                             className="flex items-center gap-1 hover:text-blue-500 transition-colors font-bold"
                           >
                             <Activity className="w-3 h-3" />
@@ -972,7 +1003,6 @@ export default function App() {
                   {loading && (
                     <div className={`${cardBg} backdrop-blur-3xl rounded-3xl shadow-2xl border-2 ${theme==='dark'?'border-slate-700':'border-slate-200'} flex flex-col md:flex-row overflow-hidden min-h-[700px] transition-all duration-500`}>
                       
-                      {/* AI Progress Section */}
                       <div className={`w-full md:w-1/2 p-12 border-b-2 md:border-b-0 md:border-r-2 ${theme==='dark'?'border-slate-700':'border-slate-200'} relative flex flex-col justify-center`}>
                         <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-pink-500/5 animate-gradient-slow"></div>
                         
@@ -1015,7 +1045,6 @@ export default function App() {
                         </div>
                       </div>
                       
-                      {/* AdSense / Pro Section */}
                       <div className={`w-full md:w-1/2 ${theme==='dark'?'bg-slate-950/60':'bg-slate-100/60'} p-12 flex flex-col items-center justify-center relative`}>
                         <span className={`absolute top-8 left-10 text-xs ${textMuted} uppercase tracking-widest font-black flex items-center gap-2 animate-pulse`}>
                           <Zap className="w-4 h-4"/> {userTier === 'free' ? 'Sponsored' : 'Premium'}
@@ -1043,7 +1072,6 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* Report Display */}
                   {report && !loading && (
                     <div 
                       className={`${cardBg} backdrop-blur-3xl p-12 lg:p-16 rounded-3xl shadow-2xl border-2 ${theme==='dark'?'border-slate-700':'border-slate-200'} flex flex-col relative transition-all duration-500 animate-fade-in-up ${userTier === 'free' ? 'select-none' : 'select-auto'}`}
@@ -1114,7 +1142,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Footer */}
           <footer className={`mt-20 pt-12 border-t-2 ${theme==='dark'?'border-slate-800':'border-slate-200'} pb-12 animate-fade-in`}>
             <div className="flex flex-col lg:flex-row justify-between items-start gap-12">
               <div className="max-w-2xl animate-slide-right">
