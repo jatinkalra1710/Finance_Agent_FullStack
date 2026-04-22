@@ -1,7 +1,5 @@
 import os
 import logging
-import requests
-from bs4 import BeautifulSoup
 from datetime import datetime
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
@@ -19,7 +17,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="AI Stock Analyst API - Enterprise Edition",
     description="7-Agent Institutional Intelligence Engine for deep equity research.",
-    version="5.0.0"
+    version="5.1.0"
 )
 
 # CORS Configuration
@@ -55,120 +53,114 @@ async def health_check():
         "service": "AI Stock Analyst Core API",
         "timestamp": datetime.now().isoformat(),
         "agents_online": 7,
-        "version": "5.0.0"
+        "version": "5.1.0 (API Edition)"
     }
 
-# --- NEW: SCREENER.IN SCRAPER ---
-def fetch_screener_in_data(ticker: str) -> dict:
-    """Scrapes highly accurate Indian stock data directly from Screener.in"""
+# --- 100% PURE API METRICS MATCHER ---
+def fetch_api_metrics(ticker_symbol: str) -> dict:
+    """Fetches metrics securely using only YFinance API endpoints."""
     try:
-        # Clean ticker for Screener.in URL (e.g., RELIANCE.NS -> RELIANCE)
-        clean_ticker = ticker.replace('.NS', '').replace('.BO', '').split('.')[0]
-        url = f"https://www.screener.in/company/{clean_ticker}/consolidated/"
+        logger.info(f"API Fetching metrics for: {ticker_symbol}")
         
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        
-        response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code != 200:
-            # Fallback to standalone page if consolidated fails
-            url = f"https://www.screener.in/company/{clean_ticker}/"
-            response = requests.get(url, headers=headers, timeout=5)
-            if response.status_code != 200:
-                raise ValueError("Screener.in page not found")
+        # Auto-append .NS for Indian stocks
+        if not ticker_symbol.endswith('.NS') and not ticker_symbol.endswith('.BO') and not ticker_symbol.startswith('^'):
+            ticker_symbol = f"{ticker_symbol}.NS"
 
-        soup = BeautifulSoup(response.text, 'html.parser')
-        metrics = {}
-        
-        # Extract from the Top Ratios unordered list
-        ul = soup.find('ul', id='top-ratios')
-        if not ul:
-            raise ValueError("Could not find ratios grid on Screener")
-            
-        li_items = ul.find_all('li')
-        for li in li_items:
-            name_span = li.find('span', class_='name')
-            value_span = li.find('span', class_='number')
-            
-            if name_span and value_span:
-                name = name_span.text.strip()
-                value = value_span.text.strip()
-                
-                if 'Market Cap' in name: metrics['Market Cap'] = f"₹{value} Cr"
-                elif 'Current Price' in name: metrics['Current Price'] = f"₹{value}"
-                elif 'High / Low' in name: metrics['52-Week Range'] = f"₹{value.replace(' ', '')}"
-                elif 'Stock P/E' in name: metrics['P/E Ratio'] = value
-                elif 'Book Value' in name: metrics['P/B Ratio'] = value
-                elif 'Dividend Yield' in name: metrics['Dividend Yield'] = f"{value}%"
-                elif 'ROCE' in name: metrics['ROCE (Est)'] = f"{value}%"
-                elif 'ROE' in name: metrics['ROE'] = f"{value}%"
-                elif 'Face Value' in name: metrics['Face Value'] = f"₹{value}"
-        
-        if len(metrics) > 0:
-            logger.info(f"Successfully scraped Screener.in for {clean_ticker}")
-            return metrics
-        else:
-            raise ValueError("Parsed empty data from Screener")
-            
-    except Exception as e:
-        logger.error(f"Screener scraping failed for {ticker}: {str(e)}")
-        return {}
-
-# --- YFINANCE FALLBACK ---
-def fetch_yfinance_metrics(ticker_symbol: str) -> dict:
-    """Fallback for Global indices or if Screener.in fails"""
-    try:
         stock = yf.Ticker(ticker_symbol)
-        fast_info = stock.fast_info
-        hist = stock.history(period="1mo")
         
+        # Use fast_info (Mobile API) and history (Chart API) - These are NOT blocked by Yahoo
+        fast = stock.fast_info
+        hist = stock.history(period="5d")
+
         metrics = {}
+        
+        # Formatting Helpers
+        def fmt_cr(val):
+            try: return f"₹{float(val) / 10000000:,.2f} Cr" if val else "N/A"
+            except: return "N/A"
+            
+        def fmt_price(val):
+            try: return f"₹{float(val):,.2f}" if val else "N/A"
+            except: return "N/A"
+            
+        def fmt_num(val):
+            try: return f"{float(val):.2f}" if val else "N/A"
+            except: return "N/A"
+            
+        def fmt_pct(val):
+            try: return f"{float(val) * 100:.2f}%" if val else "N/A"
+            except: return "N/A"
+
+        # 1. Extract Guaranteed Data (Price, Volume, Ranges, MAs)
         if not hist.empty:
-            metrics["Current Price"] = f"₹{hist['Close'].iloc[-1]:.2f}"
+            current_price = hist['Close'].iloc[-1]
+            metrics["Current Price"] = fmt_price(current_price)
             metrics["Today's Volume"] = f"{int(hist['Volume'].iloc[-1]):,}"
             
         try:
-            if hasattr(fast_info, 'market_cap') and fast_info.market_cap:
-                metrics["Market Cap"] = f"₹{fast_info.market_cap / 10000000:,.2f} Cr"
-            if hasattr(fast_info, 'year_high') and hasattr(fast_info, 'year_low'):
-                metrics["52-Week Range"] = f"₹{fast_info.year_low:,.2f} - ₹{fast_info.year_high:,.2f}"
-        except: pass
-        
-        return metrics
-    except Exception as e:
-        logger.error(f"YFinance fallback failed: {str(e)}")
-        return {}
+            if hasattr(fast, 'market_cap') and fast.market_cap:
+                metrics["Market Cap"] = fmt_cr(fast.market_cap)
+            if hasattr(fast, 'year_low') and hasattr(fast, 'year_high'):
+                metrics["52-Week Range"] = f"{fmt_price(fast.year_low)} - {fmt_price(fast.year_high)}"
+            if hasattr(fast, 'fifty_day_average') and fast.fifty_day_average:
+                metrics["50-Day MA"] = fmt_price(fast.fifty_day_average)
+            if hasattr(fast, 'two_hundred_day_average') and fast.two_hundred_day_average:
+                metrics["200-Day MA"] = fmt_price(fast.two_hundred_day_average)
+        except Exception as e:
+            logger.warning(f"Fast info API missing attributes: {e}")
 
-# --- MASTER METRICS ROUTER ---
-def get_hybrid_metrics(ticker: str) -> dict:
-    """Tries Screener.in first (for Indian stocks), falls back to YFinance."""
-    metrics = {}
-    
-    # Try Screener.in if it looks like an Indian stock (not starting with ^)
-    if not ticker.startswith('^'):
-        metrics = fetch_screener_in_data(ticker)
-        
-    # If Screener failed or it's an index, use YFinance
-    if not metrics:
-        metrics = fetch_yfinance_metrics(ticker)
-        
-    if not metrics:
+        # 2. Extract Fundamental Data (.info API - Safely Wrapped)
+        try:
+            info = stock.info
+            if info:
+                pe = info.get('trailingPE') or info.get('forwardPE')
+                if pe: metrics["P/E Ratio"] = fmt_num(pe)
+                
+                pb = info.get('priceToBook')
+                if pb: metrics["P/B Ratio"] = fmt_num(pb)
+                
+                div = info.get('dividendYield') or info.get('trailingAnnualDividendYield')
+                if div: metrics["Dividend Yield"] = fmt_pct(div)
+                
+                roe = info.get('returnOnEquity')
+                if roe: metrics["ROE"] = fmt_pct(roe)
+                
+                debt = info.get('debtToEquity')
+                if debt: metrics["Debt/Equity"] = fmt_num(debt)
+                
+                eps = info.get('trailingEps')
+                if eps: metrics["EPS (TTM)"] = fmt_price(eps)
+                
+                target = info.get('targetMeanPrice')
+                if target: metrics["Target Price"] = fmt_price(target)
+                
+                rating = info.get('recommendationKey')
+                if rating: metrics["Analyst Rating"] = str(rating).replace('_', ' ').title()
+        except Exception as e:
+            logger.warning(f"YFinance Info API blocked or unavailable: {e}")
+
+        # If we failed to get even the basic price, the ticker is invalid
+        if "Current Price" not in metrics:
+            raise ValueError("Invalid Ticker or Yahoo API entirely blocked.")
+
+        logger.info(f"Successfully fetched {len(metrics)} API metrics for {ticker_symbol}")
+        return metrics
+
+    except Exception as e:
+        logger.error(f"API Metrics Error for {ticker_symbol}: {str(e)}")
         return {
             "Status": "Data Unavailable",
-            "Message": "Could not extract ratios from Screener or YFinance.",
-            "Action": "Check ticker symbol"
+            "Message": "Live metrics API is currently busy.",
+            "Action": "Check symbol or proceed with AI Scan"
         }
-        
-    return metrics
 
-# --- Instant Metrics Endpoint (THIS IS WHAT YOUR FRONTEND IS LOOKING FOR!) ---
+# --- Instant Metrics Endpoint ---
 @app.get("/api/metrics/{ticker}")
 async def serve_metrics(ticker: str):
-    """Fetches financial ratios instantly for the frontend grid."""
+    """Fetches financial ratios instantly for the frontend grid via API."""
     try:
         logger.info(f"Metrics endpoint called for: {ticker}")
-        metrics = get_hybrid_metrics(ticker)
+        metrics = fetch_api_metrics(ticker)
         
         return {
             "success": True,
@@ -210,7 +202,7 @@ def advanced_web_search(query: str) -> str:
 
 @tool("comprehensive_yfinance_data")
 def comprehensive_yfinance_data(ticker: str) -> str:
-    """Fetches comprehensive real-time financial data"""
+    """Fetches comprehensive real-time financial data via API"""
     try:
         stock = yf.Ticker(ticker)
         hist = stock.history(period="3mo")
@@ -250,8 +242,8 @@ async def analyze_stock(request: AnalyzeRequest):
         ticker = request.ticker
         company_name = request.company_name
         
-        # Fetch UI metrics instantly from Screener.in
-        ui_metrics = get_hybrid_metrics(ticker)
+        # Fetch UI metrics instantly via API
+        ui_metrics = fetch_api_metrics(ticker)
 
         research_agent = Agent(
             role="Senior Global Market Research Analyst",
@@ -303,7 +295,6 @@ async def analyze_stock(request: AnalyzeRequest):
             llm=MODEL, verbose=True
         )
 
-        # Create tasks
         tasks = [
             Task(description=f"Gather all data for {company_name} ({ticker})", expected_output="Raw data dossier", agent=research_agent),
             Task(description=f"Fundamental analysis of {company_name}", expected_output="Fundamental report", agent=quant_agent),
