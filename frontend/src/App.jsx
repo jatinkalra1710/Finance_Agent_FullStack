@@ -28,7 +28,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard'); 
   const [memoHistory, setMemoHistory] = useState([]);
   
-  // MODALS & SAAS STATE
   const [showPopup, setShowPopup] = useState(false);
   const [showLegal, setShowLegal] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
@@ -36,7 +35,6 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [termsAgreed, setTermsAgreed] = useState(false);
   
-  // USER ACCOUNT STATE
   const [user, setUser] = useState(null); 
   const [userTier, setUserTier] = useState('free'); 
   const [generationsToday, setGenerationsToday] = useState(0);
@@ -47,7 +45,6 @@ export default function App() {
 
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
 
-  // Daily Quota Logic
   const checkDailyLimit = () => {
     if (userTier === 'ultra') return true; 
     if (userTier === 'pro' && generationsToday < 10) return true; 
@@ -72,7 +69,6 @@ export default function App() {
     }
   };
 
-  // Instant Metrics Fetching - 404 DOUBLE-SLASH FIX APPLIED
   const fetchLiveRatios = async (targetTicker) => {
     if (!targetTicker || targetTicker.length < 2) {
       setMetrics(null);
@@ -88,7 +84,6 @@ export default function App() {
 
     try {
       let rawBackendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      // Strip any trailing slashes from the environment variable to prevent 404 errors
       const cleanBackendUrl = rawBackendUrl.replace(/\/$/, '');
       
       const controller = new AbortController();
@@ -106,39 +101,20 @@ export default function App() {
       
       if (response.ok) {
         const data = await response.json();
-        
         if (data && data.metrics && Object.keys(data.metrics).length > 0) {
           setMetrics(data.metrics);
           setError(null);
         } else {
-          setMetrics({ 
-            "Status": "No Data Available",
-            "Message": "Try a different ticker",
-            "Ticker": safeTicker
-          });
+          setMetrics({ "Status": "No Data Available", "Message": "Try a different ticker", "Ticker": safeTicker });
         }
       } else {
-        setMetrics({ 
-          "Status": "API Error",
-          "Code": `Server returned ${response.status}`,
-          "Action": "Check if backend is deployed!"
-        });
+        setMetrics({ "Status": "API Error", "Code": `Server returned ${response.status}`, "Action": "Backend route not found" });
       }
     } catch (err) {
-      console.error("Metrics fetch failed:", err);
-      
       if (err.name === 'AbortError') {
-        setMetrics({ 
-          "Status": "Request Timeout",
-          "Action": "Backend is asleep or slow",
-          "Retry": "Try again"
-        });
+        setMetrics({ "Status": "Request Timeout", "Action": "Backend is slow or asleep" });
       } else {
-        setMetrics({ 
-          "Status": "Connection Failed",
-          "Error": err.message || "Unknown error",
-          "Action": "Check backend URL"
-        });
+        setMetrics({ "Status": "Connection Failed", "Error": err.message || "Unknown error" });
       }
     } finally {
       setFetchingMetrics(false);
@@ -311,14 +287,12 @@ export default function App() {
   return (
     <div className={`flex h-screen font-sans overflow-hidden relative selection:bg-blue-500/30 transition-all duration-700 ${baseBg}`}>
       
-      {/* Animated Background Blobs */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
         <div className={`absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full mix-blend-screen filter blur-[120px] animate-blob ${theme==='dark' ? 'bg-gradient-to-r from-blue-900/40 to-purple-900/30' : 'bg-gradient-to-r from-blue-300/50 to-purple-300/40'}`}></div>
         <div className={`absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full mix-blend-screen filter blur-[120px] animate-blob animation-delay-2000 ${theme==='dark' ? 'bg-gradient-to-r from-emerald-900/30 to-blue-900/40' : 'bg-gradient-to-r from-emerald-200/50 to-blue-200/50'}`}></div>
         <div className={`absolute top-[50%] left-[50%] w-[40%] h-[40%] rounded-full mix-blend-screen filter blur-[100px] animate-blob animation-delay-4000 ${theme==='dark' ? 'bg-amber-900/20' : 'bg-amber-200/40'}`}></div>
       </div>
 
-      {/* Welcome Popup */}
       {showPopup && userTier === 'free' && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl transition-all animate-fade-in">
           <div className={`${theme==='dark'?'bg-gradient-to-br from-slate-900 via-blue-900/50 to-slate-900 border-blue-500/30':'bg-white border-slate-200'} rounded-3xl shadow-2xl max-w-lg w-full p-10 relative animate-scale-in border-2 overflow-hidden`}>
@@ -366,7 +340,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Auth Modal */}
       {showAuth && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl animate-fade-in">
           <div className={`${theme==='dark'?'bg-slate-900 border-slate-700':'bg-white border-slate-200'} rounded-3xl shadow-2xl max-w-md w-full p-10 relative animate-scale-in border-2`}>
@@ -393,7 +366,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Pro Plans Modal */}
       {showPro && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl overflow-y-auto animate-fade-in">
           <div className={`${theme==='dark'?'bg-slate-900 border-slate-700':'bg-slate-50 border-slate-200'} rounded-3xl shadow-2xl max-w-6xl w-full p-10 relative animate-scale-in border-2 my-8`}>
@@ -410,7 +382,6 @@ export default function App() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
               
-              {/* Basic Plan */}
               <div className={`${theme==='dark'?'bg-slate-800/60 border-slate-700':'bg-white border-slate-200'} p-8 rounded-3xl border-2 flex flex-col hover:scale-[1.02] transition-all duration-500 animate-slide-up`}>
                 <div className="mb-6">
                   <h3 className={`text-2xl font-black ${textHeading} mb-2 flex items-center gap-2`}>
@@ -432,7 +403,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Pro Plan - FEATURED */}
               <div className={`relative ${theme==='dark'?'bg-gradient-to-br from-blue-900/40 via-purple-900/30 to-pink-900/40 border-blue-500':'bg-gradient-to-br from-blue-50 to-purple-50 border-blue-400'} p-8 rounded-3xl border-4 flex flex-col transform scale-110 shadow-2xl shadow-blue-500/30 animate-slide-up animation-delay-200 hover:scale-[1.15] transition-all duration-500`}>
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-xs font-black px-6 py-2 rounded-full uppercase tracking-widest shadow-xl">
                   <Star className="w-3 h-3 inline mr-1" /> Most Popular
@@ -459,7 +429,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Ultra Plan */}
               <div className={`${theme==='dark'?'bg-slate-800/60 border-slate-700':'bg-white border-slate-200'} p-8 rounded-3xl border-2 flex flex-col hover:scale-[1.02] transition-all duration-500 animate-slide-up animation-delay-400`}>
                 <div className="mb-6">
                   <h3 className={`text-2xl font-black ${textHeading} mb-2 flex items-center gap-2`}>
@@ -491,7 +460,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Legal Modal */}
       {showLegal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl animate-fade-in">
           <div className={`${theme==='dark'?'bg-slate-900 border-slate-700':'bg-white border-slate-200'} rounded-3xl shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col animate-scale-in border-2`}>
@@ -888,7 +856,7 @@ export default function App() {
                          </div>
                          <p className={`text-xl font-black ${textHeading} mb-3`}>{metrics.Status}</p>
                          <p className={`text-sm ${textMuted} font-semibold mb-6 max-w-xs`}>
-                           {metrics.Message || metrics.Action || 'Unable to fetch data for this ticker'}
+                           {metrics.Message || metrics.Action || metrics.Error || 'Unable to fetch data'}
                          </p>
                          <button
                            onClick={(e) => { e.preventDefault(); fetchLiveRatios(ticker); }}
@@ -903,6 +871,7 @@ export default function App() {
                     {/* STATE 4: SUCCESS */}
                     {!fetchingMetrics && metrics && !metrics.Status && Object.keys(metrics).length > 0 && (
                       <div>
+                        {/* Metrics Summary Card */}
                         {metrics["Current Price"] && (
                           <div className={`${theme==='dark'?'bg-gradient-to-br from-blue-900/30 to-purple-900/20 border-blue-500/30':'bg-gradient-to-br from-blue-50 to-purple-50 border-blue-200'} border-2 rounded-2xl p-6 mb-6 animate-fade-in-up shadow-xl`}>
                             <div className="flex items-center justify-between mb-4">
@@ -922,6 +891,7 @@ export default function App() {
                           </div>
                         )}
 
+                        {/* Metrics Grid */}
                         <div className="grid grid-cols-2 gap-4 animate-fade-in-up">
                           {Object.entries(metrics)
                             .filter(([key]) => key !== "Current Price" && key !== "Market Cap" && key !== "Status")
@@ -968,10 +938,11 @@ export default function App() {
                             })}
                         </div>
 
+                        {/* Data Source Footer */}
                         <div className={`mt-6 pt-4 border-t-2 ${theme==='dark'?'border-slate-800':'border-slate-200'} flex items-center justify-between text-xs ${textMuted}`}>
                           <span className="flex items-center gap-2 font-bold">
                             <Activity className="w-3 h-3 animate-pulse text-blue-500" />
-                            Real-time via YFinance
+                            Live via Web Scraping
                           </span>
                           <button
                             onClick={(e) => { e.preventDefault(); fetchLiveRatios(ticker); }}
@@ -1003,6 +974,7 @@ export default function App() {
                   {loading && (
                     <div className={`${cardBg} backdrop-blur-3xl rounded-3xl shadow-2xl border-2 ${theme==='dark'?'border-slate-700':'border-slate-200'} flex flex-col md:flex-row overflow-hidden min-h-[700px] transition-all duration-500`}>
                       
+                      {/* AI Progress Section */}
                       <div className={`w-full md:w-1/2 p-12 border-b-2 md:border-b-0 md:border-r-2 ${theme==='dark'?'border-slate-700':'border-slate-200'} relative flex flex-col justify-center`}>
                         <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-pink-500/5 animate-gradient-slow"></div>
                         
@@ -1045,6 +1017,7 @@ export default function App() {
                         </div>
                       </div>
                       
+                      {/* AdSense / Pro Section */}
                       <div className={`w-full md:w-1/2 ${theme==='dark'?'bg-slate-950/60':'bg-slate-100/60'} p-12 flex flex-col items-center justify-center relative`}>
                         <span className={`absolute top-8 left-10 text-xs ${textMuted} uppercase tracking-widest font-black flex items-center gap-2 animate-pulse`}>
                           <Zap className="w-4 h-4"/> {userTier === 'free' ? 'Sponsored' : 'Premium'}
@@ -1072,6 +1045,7 @@ export default function App() {
                     </div>
                   )}
 
+                  {/* Report Display */}
                   {report && !loading && (
                     <div 
                       className={`${cardBg} backdrop-blur-3xl p-12 lg:p-16 rounded-3xl shadow-2xl border-2 ${theme==='dark'?'border-slate-700':'border-slate-200'} flex flex-col relative transition-all duration-500 animate-fade-in-up ${userTier === 'free' ? 'select-none' : 'select-auto'}`}
