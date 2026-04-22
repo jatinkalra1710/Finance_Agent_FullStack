@@ -11,7 +11,7 @@ const POPULAR_STOCKS = [
   { name: "HDFC Bank", ticker: "HDFCBANK.NS", tvSymbol: "BSE:HDFCBANK" },
   { name: "TCS", ticker: "TCS.NS", tvSymbol: "BSE:TCS" },
   { name: "Infosys", ticker: "INFY.NS", tvSymbol: "BSE:INFY" },
-  { name: "Eternal", ticker: "ETERNAL.NS", tvSymbol: "BSE:ETERNAL" },
+  { name: "Zomato", ticker: "ZOMATO.NS", tvSymbol: "BSE:ZOMATO" },
   { name: "ICICI Bank", ticker: "ICICIBANK.NS", tvSymbol: "BSE:ICICIBANK" },
   { name: "Tata Motors", ticker: "TATAMOTORS.NS", tvSymbol: "BSE:TATAMOTORS" },
 ];
@@ -69,7 +69,6 @@ export default function App() {
     }
   };
 
-  // EXTENDED TIMEOUT & FAIL-SAFE UI FETCHING
   const fetchLiveRatios = async (targetTicker) => {
     if (!targetTicker || targetTicker.length < 2) {
       setMetrics(null);
@@ -88,8 +87,7 @@ export default function App() {
       const cleanBackendUrl = rawBackendUrl.replace(/\/$/, '');
       
       const controller = new AbortController();
-      // Increased to 60 seconds to survive free-tier cold starts
-      const timeoutId = setTimeout(() => controller.abort(), 60000); 
+      const timeoutId = setTimeout(() => controller.abort(), 10000); 
       
       const response = await fetch(`${cleanBackendUrl}/api/metrics/${encodeURIComponent(safeTicker)}`, {
         signal: controller.signal,
@@ -103,20 +101,20 @@ export default function App() {
       
       if (response.ok) {
         const data = await response.json();
-        if (data && data.metrics && Object.keys(data.metrics).length > 0 && !data.metrics.Status) {
+        if (data && data.metrics && Object.keys(data.metrics).length > 0) {
           setMetrics(data.metrics);
           setError(null);
         } else {
-          setMetrics({ "Status": "Target Locked", "Message": "Click 'Launch Analysis' to extract deep fundamental data.", "Ticker": safeTicker });
+          setMetrics({ "Status": "No Data Available", "Message": "Try a different ticker", "Ticker": safeTicker });
         }
       } else {
-        setMetrics({ "Status": "System Ready", "Message": "Click 'Launch Analysis' to initiate full extraction." });
+        setMetrics({ "Status": "API Error", "Code": `Server returned ${response.status}`, "Action": "Backend route not found" });
       }
     } catch (err) {
       if (err.name === 'AbortError') {
-        setMetrics({ "Status": "Waking Core Servers...", "Message": "Click 'Launch Analysis' to sync live data." });
+        setMetrics({ "Status": "Request Timeout", "Action": "Backend is slow or asleep" });
       } else {
-        setMetrics({ "Status": "Awaiting Scan", "Message": "Click 'Launch Analysis' to extract metrics." });
+        setMetrics({ "Status": "Connection Failed", "Error": err.message || "Unknown error" });
       }
     } finally {
       setFetchingMetrics(false);
@@ -202,11 +200,7 @@ export default function App() {
       
       const data = await response.json();
       setReport(data.report);
-      
-      // Update with fresh deep metrics if available
-      if (data.metrics && Object.keys(data.metrics).length > 0) {
-        setMetrics(data.metrics); 
-      }
+      setMetrics(data.metrics); 
 
       const newCount = generationsToday + 1;
       setGenerationsToday(newCount);
@@ -293,12 +287,14 @@ export default function App() {
   return (
     <div className={`flex h-screen font-sans overflow-hidden relative selection:bg-blue-500/30 transition-all duration-700 ${baseBg}`}>
       
+      {/* Animated Background Blobs */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
         <div className={`absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full mix-blend-screen filter blur-[120px] animate-blob ${theme==='dark' ? 'bg-gradient-to-r from-blue-900/40 to-purple-900/30' : 'bg-gradient-to-r from-blue-300/50 to-purple-300/40'}`}></div>
         <div className={`absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full mix-blend-screen filter blur-[120px] animate-blob animation-delay-2000 ${theme==='dark' ? 'bg-gradient-to-r from-emerald-900/30 to-blue-900/40' : 'bg-gradient-to-r from-emerald-200/50 to-blue-200/50'}`}></div>
         <div className={`absolute top-[50%] left-[50%] w-[40%] h-[40%] rounded-full mix-blend-screen filter blur-[100px] animate-blob animation-delay-4000 ${theme==='dark' ? 'bg-amber-900/20' : 'bg-amber-200/40'}`}></div>
       </div>
 
+      {/* Welcome Popup */}
       {showPopup && userTier === 'free' && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl transition-all animate-fade-in">
           <div className={`${theme==='dark'?'bg-gradient-to-br from-slate-900 via-blue-900/50 to-slate-900 border-blue-500/30':'bg-white border-slate-200'} rounded-3xl shadow-2xl max-w-lg w-full p-10 relative animate-scale-in border-2 overflow-hidden`}>
@@ -346,6 +342,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Auth Modal */}
       {showAuth && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl animate-fade-in">
           <div className={`${theme==='dark'?'bg-slate-900 border-slate-700':'bg-white border-slate-200'} rounded-3xl shadow-2xl max-w-md w-full p-10 relative animate-scale-in border-2`}>
@@ -372,6 +369,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Pro Plans Modal */}
       {showPro && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl overflow-y-auto animate-fade-in">
           <div className={`${theme==='dark'?'bg-slate-900 border-slate-700':'bg-slate-50 border-slate-200'} rounded-3xl shadow-2xl max-w-6xl w-full p-10 relative animate-scale-in border-2 my-8`}>
@@ -388,6 +386,7 @@ export default function App() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
               
+              {/* Basic Plan */}
               <div className={`${theme==='dark'?'bg-slate-800/60 border-slate-700':'bg-white border-slate-200'} p-8 rounded-3xl border-2 flex flex-col hover:scale-[1.02] transition-all duration-500 animate-slide-up`}>
                 <div className="mb-6">
                   <h3 className={`text-2xl font-black ${textHeading} mb-2 flex items-center gap-2`}>
@@ -409,6 +408,7 @@ export default function App() {
                 </button>
               </div>
 
+              {/* Pro Plan - FEATURED */}
               <div className={`relative ${theme==='dark'?'bg-gradient-to-br from-blue-900/40 via-purple-900/30 to-pink-900/40 border-blue-500':'bg-gradient-to-br from-blue-50 to-purple-50 border-blue-400'} p-8 rounded-3xl border-4 flex flex-col transform scale-110 shadow-2xl shadow-blue-500/30 animate-slide-up animation-delay-200 hover:scale-[1.15] transition-all duration-500`}>
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-xs font-black px-6 py-2 rounded-full uppercase tracking-widest shadow-xl">
                   <Star className="w-3 h-3 inline mr-1" /> Most Popular
@@ -435,6 +435,7 @@ export default function App() {
                 </button>
               </div>
 
+              {/* Ultra Plan */}
               <div className={`${theme==='dark'?'bg-slate-800/60 border-slate-700':'bg-white border-slate-200'} p-8 rounded-3xl border-2 flex flex-col hover:scale-[1.02] transition-all duration-500 animate-slide-up animation-delay-400`}>
                 <div className="mb-6">
                   <h3 className={`text-2xl font-black ${textHeading} mb-2 flex items-center gap-2`}>
@@ -466,6 +467,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Legal Modal */}
       {showLegal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl animate-fade-in">
           <div className={`${theme==='dark'?'bg-slate-900 border-slate-700':'bg-white border-slate-200'} rounded-3xl shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col animate-scale-in border-2`}>
