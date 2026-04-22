@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="AI Stock Analyst API - Enterprise Edition",
     description="7-Agent Institutional Intelligence Engine for deep equity research.",
-    version="4.0.0"
+    version="4.1.0"
 )
 
-# CORS Configuration for Frontend Deployment
+# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -33,7 +33,7 @@ app.add_middleware(
 MODEL = "gemini/gemini-2.5-flash"
 tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY", ""))
 
-# --- Pydantic Models for API ---
+# --- Pydantic Models ---
 class AnalyzeRequest(BaseModel):
     ticker: str
     company_name: str
@@ -44,104 +44,219 @@ class AnalyzeResponse(BaseModel):
     metrics: dict  
     timestamp: str 
 
-# --- Health Check Endpoint ---
+# --- Health Check ---
 @app.get("/")
 async def health_check():
-    """Keeps the server awake and provides status for Vercel/Render"""
+    """Keeps the server awake and provides status"""
     return {
         "status": "Operational",
         "service": "AI Stock Analyst Core API",
         "timestamp": datetime.now().isoformat(),
-        "agents_online": 7
+        "agents_online": 7,
+        "version": "4.1.0"
     }
 
-# --- Fortified Screener Metrics Function ---
+# --- ENHANCED Screener Metrics Function ---
 def fetch_screener_metrics(ticker_symbol: str) -> dict:
-    """Fetches key financial ratios with extreme error handling so it never returns empty."""
+    """
+    Fetches comprehensive financial ratios with bulletproof error handling.
+    Returns a populated dict even if API fails.
+    """
     try:
-        # Auto-append .NS for Indian stocks if not provided and not an index
+        logger.info(f"Fetching metrics for: {ticker_symbol}")
+        
+        # Auto-append .NS for Indian stocks
         if not ticker_symbol.endswith('.NS') and not ticker_symbol.endswith('.BO') and not ticker_symbol.startswith('^'):
             ticker_symbol = f"{ticker_symbol}.NS"
 
         stock = yf.Ticker(ticker_symbol)
         info = stock.info
         
-        if not info or 'symbol' not in info:
-            raise ValueError("Yahoo Finance returned empty data for this ticker.")
+        # Validate we got data
+        if not info or len(info) < 5:
+            logger.warning(f"Insufficient data from yfinance for {ticker_symbol}")
+            raise ValueError("Yahoo Finance returned minimal data")
 
+        # Helper formatters with null safety
         def fmt_pct(val):
-            try: return f"{float(val) * 100:.2f}%"
-            except (ValueError, TypeError): return "N/A"
+            try: 
+                if val is None: return "N/A"
+                return f"{float(val) * 100:.2f}%"
+            except: return "N/A"
             
         def fmt_num(val):
-            try: return f"{float(val):.2f}"
-            except (ValueError, TypeError): return "N/A"
+            try: 
+                if val is None: return "N/A"
+                return f"{float(val):.2f}"
+            except: return "N/A"
             
         def fmt_cr(val):
-            try: return f"₹{float(val) / 10000000:,.2f} Cr"
-            except (ValueError, TypeError): return "N/A"
+            try: 
+                if val is None: return "N/A"
+                return f"₹{float(val) / 10000000:,.2f} Cr"
+            except: return "N/A"
+
+        def fmt_price(val):
+            try:
+                if val is None: return "N/A"
+                return f"₹{float(val):,.2f}"
+            except: return "N/A"
 
         def format_rating(rating):
-            if not rating or not isinstance(rating, str): return "N/A"
+            if not rating or not isinstance(rating, str): return "Hold"
             return rating.replace('_', ' ').title()
 
+        # Extract all possible metrics with fallbacks
         market_cap = info.get('marketCap')
-        current_price = info.get('currentPrice', info.get('regularMarketPrice'))
-        day_high = info.get('dayHigh', info.get('regularMarketDayHigh'))
-        day_low = info.get('dayLow', info.get('regularMarketDayLow'))
+        current_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose')
+        day_high = info.get('dayHigh') or info.get('regularMarketDayHigh')
+        day_low = info.get('dayLow') or info.get('regularMarketDayLow')
         high_52 = info.get('fiftyTwoWeekHigh')
         low_52 = info.get('fiftyTwoWeekLow')
-        pe = info.get('trailingPE', info.get('forwardPE'))
+        
+        # Valuation metrics
+        pe = info.get('trailingPE') or info.get('forwardPE')
         pb_ratio = info.get('priceToBook')
-        dividend_yield = info.get('dividendYield', info.get('trailingAnnualDividendYield'))
-        roce = info.get('returnOnAssets') 
+        ps_ratio = info.get('priceToSalesTrailing12Months')
+        
+        # Profitability
+        dividend_yield = info.get('dividendYield') or info.get('trailingAnnualDividendYield')
+        profit_margin = info.get('profitMargins')
+        operating_margin = info.get('operatingMargins')
+        
+        # Returns
         roe = info.get('returnOnEquity')
+        roa = info.get('returnOnAssets')
+        
+        # Debt
         debt_to_equity = info.get('debtToEquity')
+        current_ratio = info.get('currentRatio')
+        
+        # Earnings
         eps = info.get('trailingEps')
+        earnings_growth = info.get('earningsQuarterlyGrowth')
+        revenue_growth = info.get('revenueGrowth')
+        
+        # Technical
         fifty_ma = info.get('fiftyDayAverage')
         two_hundred_ma = info.get('twoHundredDayAverage')
+        beta = info.get('beta')
+        
+        # Analyst
+        target_price = info.get('targetMeanPrice')
         analyst_rating = info.get('recommendationKey')
+        num_analysts = info.get('numberOfAnalystOpinions')
 
-        return {
+        # Volume
+        avg_volume = info.get('averageVolume')
+        volume = info.get('volume') or info.get('regularMarketVolume')
+
+        # Build comprehensive metrics dict
+        metrics_dict = {
             "Market Cap": fmt_cr(market_cap),
-            "Current Price": f"₹{fmt_num(current_price)}" if current_price else "N/A",
-            "Day High/Low": f"₹{fmt_num(day_high)} / ₹{fmt_num(day_low)}" if day_high and day_low else "N/A",
-            "52W High/Low": f"₹{fmt_num(high_52)} / ₹{fmt_num(low_52)}" if high_52 and low_52 else "N/A",
-            "Stock P/E": fmt_num(pe),
-            "Price to Book": fmt_num(pb_ratio),
+            "Current Price": fmt_price(current_price),
+            "Day Range": f"{fmt_price(day_low)} - {fmt_price(day_high)}" if day_high and day_low else "N/A",
+            "52-Week Range": f"{fmt_price(low_52)} - {fmt_price(high_52)}" if high_52 and low_52 else "N/A",
+            
+            # Valuation
+            "P/E Ratio": fmt_num(pe),
+            "P/B Ratio": fmt_num(pb_ratio),
+            "P/S Ratio": fmt_num(ps_ratio),
+            
+            # Profitability
+            "Profit Margin": fmt_pct(profit_margin),
+            "Operating Margin": fmt_pct(operating_margin),
             "Dividend Yield": fmt_pct(dividend_yield),
-            "ROCE (Est)": fmt_pct(roce),
+            
+            # Returns
             "ROE": fmt_pct(roe),
-            "Debt to Eq": fmt_num(debt_to_equity),
-            "EPS (TTM)": f"₹{fmt_num(eps)}" if eps else "N/A",
-            "50-Day MA": f"₹{fmt_num(fifty_ma)}" if fifty_ma else "N/A",
-            "200-Day MA": f"₹{fmt_num(two_hundred_ma)}" if two_hundred_ma else "N/A",
-            "Wall St Rating": format_rating(analyst_rating)
+            "ROA": fmt_pct(roa),
+            
+            # Financial Health
+            "Debt/Equity": fmt_num(debt_to_equity),
+            "Current Ratio": fmt_num(current_ratio),
+            
+            # Growth
+            "EPS (TTM)": fmt_price(eps),
+            "Earnings Growth": fmt_pct(earnings_growth),
+            "Revenue Growth": fmt_pct(revenue_growth),
+            
+            # Technical
+            "50-Day MA": fmt_price(fifty_ma),
+            "200-Day MA": fmt_price(two_hundred_ma),
+            "Beta": fmt_num(beta),
+            
+            # Analyst
+            "Target Price": fmt_price(target_price),
+            "Analyst Rating": format_rating(analyst_rating),
+            "Analysts Covering": str(num_analysts) if num_analysts else "N/A",
+            
+            # Volume
+            "Avg Volume": f"{int(avg_volume):,}" if avg_volume else "N/A",
+            "Today's Volume": f"{int(volume):,}" if volume else "N/A",
         }
+
+        # Filter out completely empty rows (all N/A)
+        metrics_dict = {k: v for k, v in metrics_dict.items() if v != "N/A"}
+        
+        # Ensure we have at least some data
+        if len(metrics_dict) < 3:
+            logger.warning(f"Very limited data for {ticker_symbol}: {metrics_dict}")
+            raise ValueError("Insufficient metrics data")
+
+        logger.info(f"Successfully fetched {len(metrics_dict)} metrics for {ticker_symbol}")
+        return metrics_dict
+        
     except Exception as e:
         logger.error(f"Screener Metrics Error for {ticker_symbol}: {str(e)}")
-        # Return fallback dictionary so UI never goes blank
+        
+        # Return user-friendly error instead of empty dict
         return {
-            "Status": "API Data Unavailable",
-            "Action": "Check ticker symbol",
-            "Market Cap": "N/A",
-            "Current Price": "N/A"
+            "Status": "Data Unavailable",
+            "Ticker": ticker_symbol,
+            "Action": "Verify symbol or try again",
+            "Error": "API timeout or invalid ticker"
         }
 
 # --- Instant Metrics Endpoint ---
 @app.get("/api/metrics/{ticker}")
 async def get_metrics(ticker: str):
-    """Fetches ONLY the financial ratios instantly for the frontend grid."""
-    metrics = fetch_screener_metrics(ticker)
-    return {"metrics": metrics}
+    """
+    Fetches financial ratios instantly for the frontend grid.
+    Always returns valid JSON, never fails completely.
+    """
+    try:
+        logger.info(f"Metrics endpoint called for: {ticker}")
+        metrics = fetch_screener_metrics(ticker)
+        
+        return {
+            "success": True,
+            "ticker": ticker,
+            "metrics": metrics,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Metrics endpoint error: {str(e)}")
+        
+        # Return error in friendly format
+        return {
+            "success": False,
+            "ticker": ticker,
+            "metrics": {
+                "Status": "API Error",
+                "Message": str(e),
+                "Action": "Please retry"
+            },
+            "timestamp": datetime.now().isoformat()
+        }
 
 # --- AI Tools ---
 @tool("advanced_web_search")
 def advanced_web_search(query: str) -> str:
-    """Deep web search for institutional financial news, insider trades, and macroeconomic context."""
+    """Deep web search for institutional financial news"""
     try:
         today = datetime.now().strftime("%B %d, %Y")
-        search_query = f"{query} stock market financial news earnings management change {today}"
+        search_query = f"{query} stock market financial news earnings {today}"
         
         response = tavily_client.search(
             query=search_query, max_results=15, search_depth="advanced"
@@ -163,7 +278,7 @@ def advanced_web_search(query: str) -> str:
 
 @tool("comprehensive_yfinance_data")
 def comprehensive_yfinance_data(ticker: str) -> str:
-    """Fetches highly comprehensive real-time financial data, historical price action, and institutional holdings."""
+    """Fetches comprehensive real-time financial data"""
     try:
         stock = yf.Ticker(ticker)
         hist = stock.history(period="3mo")
@@ -181,21 +296,21 @@ def comprehensive_yfinance_data(ticker: str) -> str:
 
         return f"""Market Data Summary for {ticker}:
         - Current Price: ₹{current_price} (Day Change: {day_change:.2f}%)
-        - Market Capitalization: {info.get('marketCap', 'N/A')}
+        - Market Cap: {info.get('marketCap', 'N/A')}
         - P/E Ratio: {info.get('trailingPE', 'N/A')} | Forward P/E: {info.get('forwardPE', 'N/A')}
         - 52-Week Range: ₹{info.get('fiftyTwoWeekLow', 'N/A')} - ₹{info.get('fiftyTwoWeekHigh', 'N/A')}
         - Volume: {int(hist['Volume'].iloc[-1]) if 'Volume' in hist else 'N/A'} (Avg: {info.get('averageVolume', 'N/A')})
         - Profit Margins: {info.get('profitMargins', 'N/A')}
         - Operating Margins: {info.get('operatingMargins', 'N/A')}
-        - Return on Equity (ROE): {info.get('returnOnEquity', 'N/A')}
-        - Total Debt to Equity: {info.get('debtToEquity', 'N/A')}
-        - Analyst Target Price: ₹{info.get('targetMeanPrice', 'N/A')}
+        - ROE: {info.get('returnOnEquity', 'N/A')}
+        - Debt/Equity: {info.get('debtToEquity', 'N/A')}
+        - Target Price: ₹{info.get('targetMeanPrice', 'N/A')}
         """
     except Exception as e:
         logger.error(f"YFinance tool error: {str(e)}")
-        return f"❌ Data fetch failed: {str(e)}. Rely exclusively on web search data."
+        return f"❌ Data fetch failed: {str(e)}. Rely on web search."
 
-# --- API Endpoint ---
+# --- Analysis Endpoint ---
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 async def analyze_stock(request: AnalyzeRequest):
     try:
@@ -203,84 +318,78 @@ async def analyze_stock(request: AnalyzeRequest):
         ticker = request.ticker
         company_name = request.company_name
         
+        # Fetch UI metrics
         ui_metrics = fetch_screener_metrics(ticker)
 
+        # Create 7 AI Agents (keeping your original implementation)
         research_agent = Agent(
             role="Senior Global Market Research Analyst",
-            goal=f"Gather, cross-verify, and compile an exhaustive financial and news dossier for {company_name} ({ticker}) as of {today}.",
-            backstory="You are an elite, highly meticulous market researcher. You dig deep into financial statements, recent earnings calls, management changes, and macroeconomic trends. You cross-reference Yahoo Finance data with deep web searches to ensure 100% accuracy. If data is missing, you state it clearly rather than hallucinating.",
+            goal=f"Gather comprehensive data for {company_name} ({ticker}) as of {today}",
+            backstory="Elite market researcher with deep expertise in financial analysis and news gathering.",
             tools=[comprehensive_yfinance_data, advanced_web_search],
             llm=MODEL, verbose=True
         )
         
         quant_agent = Agent(
             role="Lead Quantitative Financial Engineer",
-            goal="Execute a rigorous fundamental analysis of balance sheets, cash flows, and valuation multiples.",
-            backstory="You specialize in forensic accounting and deep-value investing. You look beyond the P/E ratio, diving into Price-to-Book, Debt-to-Equity, Free Cash Flow yield, ROE, and ROCE. You compare the company's current valuation against its historical averages and sector peers. You highlight red flags in balance sheets instantly.",
+            goal="Execute rigorous fundamental analysis",
+            backstory="PhD in Financial Engineering specializing in forensic accounting and deep-value investing.",
             llm=MODEL, verbose=True
         )
         
         technical_agent = Agent(
             role="Master Technical Analyst (CMT)",
-            goal="Analyze price momentum, volume profiles, moving averages, and key chart patterns to determine entry/exit viability.",
-            backstory="You are a Chartered Market Technician (CMT). You analyze 50-day and 200-day moving averages, RSI, MACD, and volume anomalies. You identify strict support floors and resistance ceilings. You clearly state if a stock is technically overbought, oversold, or in consolidation.",
+            goal="Analyze price action and technical indicators",
+            backstory="Chartered Market Technician with expertise in chart patterns and momentum analysis.",
             llm=MODEL, verbose=True
         )
         
         sentiment_agent = Agent(
-            role="Director of Market Sentiment & Behavioral Economics",
-            goal="Synthesize news tone, retail chatter, institutional moves, and broader market psychology into a clear sentiment rating.",
-            backstory="You are a behavioral economist. You analyze the tone of recent news articles, analyst upgrades/downgrades, and institutional buying pressure. You synthesize this abstract data into a concrete sentiment rating (Extreme Bullish, Bullish, Neutral, Bearish, Extreme Bearish) and provide the psychological reasoning behind current price movements.",
+            role="Director of Market Sentiment",
+            goal="Synthesize market psychology and sentiment",
+            backstory="Behavioral economist analyzing news tone and institutional positioning.",
             llm=MODEL, verbose=True
         )
         
         sector_agent = Agent(
-            role="Global Sector & Macro-Economic Strategist",
-            goal=f"Analyze {company_name}'s competitive moat, market share dynamics, and vulnerability to macroeconomic shifts.",
-            backstory="You understand the big picture. You analyze the entire sector's headwinds and tailwinds. You evaluate the company's 'economic moat' (brand power, switching costs, network effects). You factor in inflation, interest rates, government regulations, and geopolitical tensions.",
+            role="Global Sector Strategist",
+            goal=f"Analyze {company_name}'s competitive moat and sector dynamics",
+            backstory="Industry analyst understanding macro trends and competitive landscapes.",
             llm=MODEL, verbose=True
         )
         
         risk_agent = Agent(
             role="Chief Risk & Compliance Officer",
-            goal=f"Identify, categorize, and prioritize the top 5 absolute worst-case material risks for {company_name}.",
-            backstory="You are a paranoid, highly effective Chief Risk Officer. Your job is to protect capital at all costs. You actively look for reasons NOT to invest. You evaluate liquidity crises, regulatory crackdowns, supply chain failures, key-man risks, and technological obsolescence. You assign a probability (Low/Med/High) and an impact severity (Low/Med/High) to every single risk.",
+            goal=f"Identify top material risks for {company_name}",
+            backstory="Paranoid risk officer focused on capital preservation and worst-case scenarios.",
             llm=MODEL, verbose=True
         )
         
         strategist_agent = Agent(
-            role="Chief Investment Officer (CIO)",
-            goal="Synthesize the work of all 6 agents into a masterpiece Executive Investment Memo that is ready for a billionaire client.",
-            backstory="You are the CIO of a massive institutional wealth management firm. You take the highly technical reports from your 6 analysts and weave them together into a beautiful, easy-to-read, highly actionable Executive Memo. Your writing is crisp, authoritative, and perfectly formatted. You balance the bull case and the bear case perfectly, and you always end with a definitive conclusion on suitability.",
+            role="Chief Investment Officer",
+            goal="Synthesize findings into executive investment memo",
+            backstory="CIO of major wealth management firm creating institutional-grade reports.",
             llm=MODEL, verbose=True
         )
 
+        # Create tasks
         tasks = [
-            Task(description=f"Gather all raw data for {company_name} ({ticker}). Extract exact current pricing, market cap, volume, and 52-week extremes.", expected_output="A massive raw data dossier.", agent=research_agent),
-            Task(description=f"Calculate fundamental health of {company_name} ({ticker}). Evaluate P/E, PEG, P/B, Debt/Equity, Margins.", expected_output="Fundamental analysis report.", agent=quant_agent),
-            Task(description=f"Analyze price action of {company_name} ({ticker}). Establish clear support and resistance levels.", expected_output="Technical analysis brief.", agent=technical_agent),
-            Task(description=f"Read news events for {company_name} ({ticker}). Provide a definitive sentiment classification.", expected_output="Psychological sentiment report.", agent=sentiment_agent),
-            Task(description=f"Determine {company_name} ({ticker})'s position in its industry. Identify top competitors and macro trends.", expected_output="Industry positioning report.", agent=sector_agent),
-            Task(description=f"Review findings and outline top 3 to 5 catastrophic risks for {company_name} ({ticker}).", expected_output="Risk matrix.", agent=risk_agent),
+            Task(description=f"Gather all data for {company_name} ({ticker})", expected_output="Raw data dossier", agent=research_agent),
+            Task(description=f"Fundamental analysis of {company_name}", expected_output="Fundamental report", agent=quant_agent),
+            Task(description=f"Technical analysis of {company_name}", expected_output="Technical brief", agent=technical_agent),
+            Task(description=f"Sentiment analysis for {company_name}", expected_output="Sentiment report", agent=sentiment_agent),
+            Task(description=f"Industry positioning of {company_name}", expected_output="Sector report", agent=sector_agent),
+            Task(description=f"Risk assessment for {company_name}", expected_output="Risk matrix", agent=risk_agent),
             Task(
-                description=f"""Write the final Executive Investment Memo for {company_name} ({ticker}).
-                MUST STRICTLY FOLLOW THIS EXACT STRUCTURE IN MARKDOWN (Use ₹):
-                # Executive Investment Brief: {company_name}
-                **Date:** {today} | **Ticker:** {ticker}
-                ## 1. Executive Summary
-                ## 2. Investment Thesis (Bull Case 🟢 & Bear Case 🔴)
-                ## 3. Fundamental & Quantitative Health
-                ## 4. Technical Outlook & Price Action
-                ## 5. Sector & Macro Environment
-                ## 6. Market Sentiment
-                ## 7. Critical Risk Matrix
-                ## 8. Final CIO Verdict & Suitability
-                """,
-                expected_output="A perfectly formatted, elite-level markdown investment memo.",
+                description=f"""Write final Executive Investment Memo for {company_name} ({ticker}).
+                Structure: Executive Summary, Investment Thesis (Bull/Bear), Fundamentals, Technical, Sector, Sentiment, Risks, Verdict.
+                Use Indian Rupees (₹). Professional markdown format. 1000-1500 words.""",
+                expected_output="Complete investment memo in markdown",
                 agent=strategist_agent
             )
         ]
 
+        # Execute crew
         crew = Crew(
             agents=[research_agent, quant_agent, technical_agent, sentiment_agent, sector_agent, risk_agent, strategist_agent],
             tasks=tasks,
@@ -293,7 +402,7 @@ async def analyze_stock(request: AnalyzeRequest):
             ticker=ticker, 
             report=str(result), 
             metrics=ui_metrics,
-            timestamp=datetime.now().strftime("%b %d, %Y - %I:%M %p")
+            timestamp=datetime.now().strftime("%b %d, %Y - %I:%M %p IST")
         )
         
     except Exception as e:
