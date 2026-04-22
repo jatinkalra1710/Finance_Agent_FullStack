@@ -33,7 +33,7 @@ export default function App() {
   const [showLegal, setShowLegal] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [showPro, setShowPro] = useState(false);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [termsAgreed, setTermsAgreed] = useState(false);
   
   // USER ACCOUNT STATE
@@ -44,7 +44,6 @@ export default function App() {
   const [loadingStep, setLoadingStep] = useState(0);
   const [theme, setTheme] = useState('dark'); 
   const [copied, setCopied] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
 
@@ -73,41 +72,73 @@ export default function App() {
     }
   };
 
-  // Instant Metrics Fetching
+  // Instant Metrics Fetching - FIXED VERSION
   const fetchLiveRatios = async (targetTicker) => {
-    if (!targetTicker) return;
+    if (!targetTicker || targetTicker.length < 2) {
+      setMetrics(null);
+      return;
+    }
+    
     setFetchingMetrics(true);
     
-    let safeTicker = targetTicker.toUpperCase();
+    let safeTicker = targetTicker.toUpperCase().trim();
     if (!safeTicker.includes('.') && !safeTicker.startsWith('^')) {
       safeTicker = `${safeTicker}.NS`;
     }
 
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      const response = await fetch(`${backendUrl}/api/metrics/${encodeURIComponent(safeTicker)}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); 
+      
+      const response = await fetch(`${backendUrl}/api/metrics/${encodeURIComponent(safeTicker)}`, {
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      });
+      
+      clearTimeout(timeoutId);
       
       if (response.ok) {
         const data = await response.json();
-        setMetrics(data.metrics);
+        if (data && data.metrics && Object.keys(data.metrics).length > 0 && !data.metrics.Status) {
+          setMetrics(data.metrics);
+          setError(null);
+        } else {
+          // Properly handle empty object {} from backend
+          setMetrics({ 
+            "Status": "No Data Available",
+            "Message": "Data missing on Yahoo Finance",
+            "Ticker": safeTicker
+          });
+        }
       } else {
-        setMetrics({});
+        setMetrics({ 
+          "Status": "API Error",
+          "Code": response.status.toString(),
+          "Action": "Verify ticker symbol"
+        });
       }
     } catch (err) {
-      console.error("Failed to fetch preliminary metrics", err);
-      setMetrics({});
+      if (err.name === 'AbortError') {
+        setMetrics({ "Status": "Request Timeout", "Action": "Check connection" });
+      } else {
+        setMetrics({ "Status": "Connection Failed", "Error": err.message || "Unknown error" });
+      }
     } finally {
       setFetchingMetrics(false);
     }
   };
 
-  // Auto-fetch metrics
+  // Auto-fetch metrics with debouncing
   useEffect(() => {
+    if (!ticker || ticker.length < 2) {
+      setMetrics(null);
+      return;
+    }
     const timer = setTimeout(() => {
-      if (ticker && ticker.length >= 3) {
-        fetchLiveRatios(ticker);
-      }
-    }, 1000);
+      fetchLiveRatios(ticker);
+    }, 800); 
+    
     return () => clearTimeout(timer);
   }, [ticker]);
 
@@ -256,7 +287,6 @@ export default function App() {
   // Dynamic Theme Colors
   const baseBg = theme === 'dark' ? 'bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900' : 'bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100';
   const cardBg = theme === 'dark' ? 'bg-slate-900/80 border-slate-800/80' : 'bg-white/90 border-slate-200';
-  const cardHover = theme === 'dark' ? 'hover:bg-slate-800/60 hover:border-blue-500/50' : 'hover:bg-slate-50 hover:border-blue-300';
   const inputBg = theme === 'dark' ? 'bg-slate-950/50 border-slate-700 text-white focus:ring-blue-500' : 'bg-white border-slate-300 text-slate-900 focus:ring-blue-500';
   const textMuted = theme === 'dark' ? 'text-slate-400' : 'text-slate-600';
   const textHeading = theme === 'dark' ? 'text-white' : 'text-slate-900';
@@ -766,7 +796,7 @@ export default function App() {
                 <div className="lg:col-span-8 h-full animate-slide-up">
                   <div className={`${cardBg} backdrop-blur-3xl p-3 rounded-3xl shadow-2xl border-2 ${theme==='dark'?'border-slate-700':'border-slate-200'} h-full overflow-hidden transition-all duration-500`}>
                     <AdvancedRealTimeChart 
-                      key={`${theme}-${ticker}`}
+                      key={theme}
                       theme={theme} 
                       symbol={getTradingViewSymbol(ticker)} 
                       autosize 
