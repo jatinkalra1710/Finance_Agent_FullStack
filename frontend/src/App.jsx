@@ -1028,7 +1028,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Footer */}
           <footer className={`mt-20 pt-12 border-t-2 ${theme==='dark'?'border-slate-800':'border-slate-200'} pb-12 animate-fade-in`}>
             <div className="flex flex-col lg:flex-row justify-between items-start gap-12">
               <div className="max-w-2xl animate-slide-right">
