@@ -11,7 +11,7 @@ const POPULAR_STOCKS = [
   { name: "HDFC Bank", ticker: "HDFCBANK.NS", tvSymbol: "BSE:HDFCBANK" },
   { name: "TCS", ticker: "TCS.NS", tvSymbol: "BSE:TCS" },
   { name: "Infosys", ticker: "INFY.NS", tvSymbol: "BSE:INFY" },
-  { name: "Zomato", ticker: "ZOMATO.NS", tvSymbol: "BSE:ZOMATO" },
+  { name: "Zomato(Eternal)", ticker: "ETERNAL.NS", tvSymbol: "BSE:ETERNAL" },
   { name: "ICICI Bank", ticker: "ICICIBANK.NS", tvSymbol: "BSE:ICICIBANK" },
   { name: "Tata Motors", ticker: "TATAMOTORS.NS", tvSymbol: "BSE:TATAMOTORS" },
 ];
