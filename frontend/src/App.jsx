@@ -72,7 +72,6 @@ export default function App() {
     }
   };
 
-  // Instant Metrics Fetching - FIXED VERSION
   const fetchLiveRatios = async (targetTicker) => {
     if (!targetTicker || targetTicker.length < 2) {
       setMetrics(null);
@@ -88,57 +87,31 @@ export default function App() {
 
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); 
-      
-      const response = await fetch(`${backendUrl}/api/metrics/${encodeURIComponent(safeTicker)}`, {
-        signal: controller.signal,
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
-      });
-      
-      clearTimeout(timeoutId);
+      const response = await fetch(`${backendUrl}/api/metrics/${encodeURIComponent(safeTicker)}`);
       
       if (response.ok) {
         const data = await response.json();
-        if (data && data.metrics && Object.keys(data.metrics).length > 0 && !data.metrics.Status) {
+        if (data && data.metrics && Object.keys(data.metrics).length > 0) {
           setMetrics(data.metrics);
-          setError(null);
         } else {
-          // Properly handle empty object {} from backend
-          setMetrics({ 
-            "Status": "No Data Available",
-            "Message": "Data missing on Yahoo Finance",
-            "Ticker": safeTicker
-          });
+          setMetrics({ "Status": "Data Unavailable", "Message": "No data returned from backend." });
         }
       } else {
-        setMetrics({ 
-          "Status": "API Error",
-          "Code": response.status.toString(),
-          "Action": "Verify ticker symbol"
-        });
+        setMetrics({ "Status": "API Error", "Message": `Server returned ${response.status}` });
       }
     } catch (err) {
-      if (err.name === 'AbortError') {
-        setMetrics({ "Status": "Request Timeout", "Action": "Check connection" });
-      } else {
-        setMetrics({ "Status": "Connection Failed", "Error": err.message || "Unknown error" });
-      }
+      setMetrics({ "Status": "Connection Failed", "Message": err.message });
     } finally {
       setFetchingMetrics(false);
     }
   };
 
-  // Auto-fetch metrics with debouncing
   useEffect(() => {
     if (!ticker || ticker.length < 2) {
       setMetrics(null);
       return;
     }
-    const timer = setTimeout(() => {
-      fetchLiveRatios(ticker);
-    }, 800); 
-    
+    const timer = setTimeout(() => fetchLiveRatios(ticker), 800); 
     return () => clearTimeout(timer);
   }, [ticker]);
 
@@ -207,7 +180,11 @@ export default function App() {
       
       const data = await response.json();
       setReport(data.report);
-      setMetrics(data.metrics); 
+      
+      // If the analyze endpoint brings back fresh UI metrics, merge them safely
+      if (data.metrics && Object.keys(data.metrics).length > 0) {
+        setMetrics(data.metrics); 
+      }
 
       const newCount = generationsToday + 1;
       setGenerationsToday(newCount);
@@ -290,6 +267,12 @@ export default function App() {
   const inputBg = theme === 'dark' ? 'bg-slate-950/50 border-slate-700 text-white focus:ring-blue-500' : 'bg-white border-slate-300 text-slate-900 focus:ring-blue-500';
   const textMuted = theme === 'dark' ? 'text-slate-400' : 'text-slate-600';
   const textHeading = theme === 'dark' ? 'text-white' : 'text-slate-900';
+
+  // MATHEMATHICALLY PERFECT MUTUALLY EXCLUSIVE STATES
+  const showInitial = !ticker && !fetchingMetrics && !loading && (!metrics || Object.keys(metrics).length === 0);
+  const showSkeleton = fetchingMetrics || (loading && (!metrics || Object.keys(metrics).length === 0));
+  const showError = !showSkeleton && ticker && metrics && metrics.Status;
+  const showSuccess = !showSkeleton && !showError && metrics && Object.keys(metrics).length > 0;
 
   return (
     <div className={`flex h-screen font-sans overflow-hidden relative selection:bg-blue-500/30 transition-all duration-700 ${baseBg}`}>
@@ -815,54 +798,158 @@ export default function App() {
                       <Activity className="w-6 h-6 text-blue-500 animate-pulse"/> 
                       Live Metrics
                     </h3>
-                    <span className="text-xs bg-blue-500/10 text-blue-500 px-3 py-1.5 rounded-full font-black uppercase border-2 border-blue-500/20 animate-pulse">
-                      Real-Time
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {fetchingMetrics && (
+                        <span className="text-xs bg-amber-500/10 text-amber-500 px-3 py-1.5 rounded-full font-black uppercase border-2 border-amber-500/20 flex items-center gap-2">
+                          <Activity className="w-3 h-3 animate-spin" />
+                          Fetching...
+                        </span>
+                      )}
+                      {!fetchingMetrics && metrics && Object.keys(metrics).length > 0 && !metrics.Status && (
+                        <span className="text-xs bg-emerald-500/10 text-emerald-500 px-3 py-1.5 rounded-full font-black uppercase border-2 border-emerald-500/20 flex items-center gap-2 animate-pulse">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Live
+                        </span>
+                      )}
+                    </div>
                   </div>
                   
                   <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
-                    {!ticker && !loading && !fetchingMetrics && !metrics && (
-                      <div className="h-full flex flex-col items-center justify-center text-center opacity-50 animate-pulse">
-                        <Target className={`w-16 h-16 ${textMuted} mb-6`} />
-                        <p className={`text-base font-bold ${textMuted}`}>
-                          Select an asset to view fundamentals
+                    
+                    {/* STATE 1: INITIAL (No ticker) */}
+                    {showInitial && (
+                      <div className="h-full flex flex-col items-center justify-center text-center opacity-60 animate-pulse">
+                        <Target className={`w-20 h-20 ${textMuted} mb-6`} />
+                        <p className={`text-lg font-black ${textHeading} mb-2`}>
+                          Select a Stock
+                        </p>
+                        <p className={`text-sm ${textMuted} font-semibold max-w-xs`}>
+                          Choose from Quick Access or enter a ticker to view real-time fundamentals
                         </p>
                       </div>
                     )}
 
-                    {(loading || fetchingMetrics) && (!metrics || Object.keys(metrics).length === 0) && (
+                    {/* STATE 2: LOADING SKELETON */}
+                    {showSkeleton && (
                       <div className="h-full grid grid-cols-2 gap-4 content-start">
                         {[...Array(14)].map((_, i) => (
-                          <div key={i} style={{animationDelay: `${i * 50}ms`}} className={`flex flex-col justify-center ${theme==='dark'?'bg-slate-800/40 border-slate-700':'bg-slate-100/60 border-slate-200'} p-5 rounded-2xl border-2 h-24 animate-pulse-slow`}>
-                            <div className={`h-3 w-20 ${theme==='dark'?'bg-slate-700':'bg-slate-300'} rounded animate-pulse mb-3`}></div>
-                            <div className={`h-5 w-24 ${theme==='dark'?'bg-slate-600':'bg-slate-400'} rounded animate-pulse animation-delay-150`}></div>
+                          <div 
+                            key={i} 
+                            style={{animationDelay: `${i * 40}ms`}} 
+                            className={`flex flex-col justify-center ${theme==='dark'?'bg-gradient-to-br from-slate-800/50 to-slate-800/30 border-slate-700':'bg-gradient-to-br from-slate-100/80 to-slate-50 border-slate-200'} p-5 rounded-2xl border-2 h-24 overflow-hidden relative animate-pulse-slow`}
+                          >
+                            <div className="absolute inset-0 shimmer"></div>
+                            <div className={`h-3 w-20 ${theme==='dark'?'bg-slate-700':'bg-slate-300'} rounded mb-3 relative z-10`}></div>
+                            <div className={`h-5 w-24 ${theme==='dark'?'bg-slate-600':'bg-slate-400'} rounded relative z-10`}></div>
                           </div>
                         ))}
                       </div>
                     )}
 
-                    {!loading && !fetchingMetrics && ticker && metrics && metrics.Status && (
+                    {/* STATE 3: ERROR FROM API */}
+                    {showError && (
                        <div className="h-full flex flex-col items-center justify-center text-center animate-scale-in">
-                         <AlertCircle className="w-14 h-14 text-amber-500 mb-5 animate-bounce" />
-                         <p className={`text-lg font-black ${textHeading} mb-2`}>{metrics.Status}</p>
-                         <p className={`text-sm ${textMuted} font-semibold`}>
-                           Verify ticker symbol format
+                         <div className={`w-20 h-20 rounded-full ${theme==='dark'?'bg-amber-500/10 border-amber-500/30':'bg-amber-50 border-amber-200'} border-2 flex items-center justify-center mb-6 shadow-xl`}>
+                           <AlertCircle className="w-10 h-10 text-amber-500 animate-bounce" />
+                         </div>
+                         <p className={`text-xl font-black ${textHeading} mb-3`}>{metrics.Status || "Data Unavailable"}</p>
+                         <p className={`text-sm ${textMuted} font-semibold mb-6 max-w-xs`}>
+                           {metrics.Message || metrics.Action || 'Unable to fetch data for this ticker'}
                          </p>
+                         <button
+                           onClick={() => fetchLiveRatios(ticker)}
+                           className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 ${theme==='dark'?'bg-blue-600 hover:bg-blue-700 text-white':'bg-blue-500 hover:bg-blue-600 text-white'}`}
+                         >
+                           <Activity className="w-5 h-5" />
+                           Retry Fetch
+                         </button>
                        </div>
                     )}
 
-                    {metrics && !metrics.Status && Object.keys(metrics).length > 0 && (!fetchingMetrics || Object.keys(metrics).length > 0) && (
-                      <div className="grid grid-cols-2 gap-4 animate-fade-in-up">
-                        {Object.entries(metrics).map(([key, val], index) => (
-                          <div key={key} style={{animationDelay: `${index * 50}ms`}} className={`flex flex-col justify-center ${theme==='dark'?'bg-slate-800/50 border-slate-700/60':'bg-slate-50 border-slate-200'} p-5 rounded-2xl border-2 hover:border-blue-500/60 transition-all duration-300 group hover:scale-105 animate-slide-up`}>
-                            <span className={`${textMuted} text-xs font-black uppercase tracking-wider mb-2 group-hover:text-blue-500 transition-colors`}>
-                              {key}
-                            </span>
-                            <span className={`${textHeading} font-black text-base truncate ${val && (val.includes('Buy') || val.includes('Strong')) ? 'text-emerald-500' : ''}`}>
-                              {val}
-                            </span>
+                    {/* STATE 4: SUCCESS */}
+                    {showSuccess && (
+                      <div>
+                        {/* Metrics Summary Card */}
+                        {metrics["Current Price"] && (
+                          <div className={`${theme==='dark'?'bg-gradient-to-br from-blue-900/30 to-purple-900/20 border-blue-500/30':'bg-gradient-to-br from-blue-50 to-purple-50 border-blue-200'} border-2 rounded-2xl p-6 mb-6 animate-fade-in-up shadow-xl`}>
+                            <div className="flex items-center justify-between mb-4">
+                              <h4 className={`text-sm font-black ${textMuted} uppercase tracking-wider`}>
+                                Current Valuation
+                              </h4>
+                              <TrendingUp className="w-5 h-5 text-blue-500 animate-bounce" />
+                            </div>
+                            <div className={`text-4xl font-black ${textHeading} mb-2`}>
+                              {metrics["Current Price"]}
+                            </div>
+                            {metrics["Market Cap"] && (
+                              <div className={`text-lg font-bold text-blue-500`}>
+                                {metrics["Market Cap"]}
+                              </div>
+                            )}
                           </div>
-                        ))}
+                        )}
+
+                        {/* Metrics Grid */}
+                        <div className="grid grid-cols-2 gap-4 animate-fade-in-up">
+                          {Object.entries(metrics)
+                            .filter(([key]) => key !== "Current Price" && key !== "Market Cap" && key !== "Status")
+                            .map(([key, val], index) => {
+                              let valueColor = textHeading;
+                              let iconColor = 'text-blue-500';
+                              
+                              if (key.includes('Rating') || key.includes('Recommendation')) {
+                                if (val && typeof val === 'string') {
+                                  if (val.toLowerCase().includes('buy') || val.toLowerCase().includes('strong')) {
+                                    valueColor = 'text-emerald-500';
+                                    iconColor = 'text-emerald-500';
+                                  } else if (val.toLowerCase().includes('sell') || val.toLowerCase().includes('reduce')) {
+                                    valueColor = 'text-red-500';
+                                    iconColor = 'text-red-500';
+                                  }
+                                }
+                              }
+                              
+                              if (key.includes('Yield') || key.includes('ROE') || key.includes('ROCE')) {
+                                if (val && !val.includes('N/A')) {
+                                  valueColor = 'text-green-500';
+                                  iconColor = 'text-green-500';
+                                }
+                              }
+
+                              return (
+                                <div 
+                                  key={key} 
+                                  style={{animationDelay: `${index * 50}ms`}} 
+                                  className={`flex flex-col justify-between ${theme==='dark'?'bg-slate-800/60 border-slate-700/70 hover:bg-slate-800 hover:border-blue-500/50':'bg-slate-50 border-slate-200 hover:bg-white hover:border-blue-400/50'} p-5 rounded-2xl border-2 transition-all duration-300 group hover:scale-105 hover:shadow-xl animate-slide-up relative overflow-hidden`}
+                                >
+                                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                  
+                                  <span className={`${textMuted} text-xs font-black uppercase tracking-wider mb-2 group-hover:text-blue-500 transition-colors relative z-10 flex items-center gap-2`}>
+                                    <div className={`w-1.5 h-1.5 rounded-full ${iconColor} opacity-60 group-hover:opacity-100`}></div>
+                                    {key}
+                                  </span>
+                                  <span className={`${valueColor} font-black text-base truncate relative z-10 group-hover:scale-110 transition-transform origin-left`}>
+                                    {val}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                        </div>
+
+                        {/* Data Source Footer */}
+                        <div className={`mt-6 pt-4 border-t-2 ${theme==='dark'?'border-slate-800':'border-slate-200'} flex items-center justify-between text-xs ${textMuted}`}>
+                          <span className="flex items-center gap-2 font-bold">
+                            <Activity className="w-3 h-3 animate-pulse text-blue-500" />
+                            Real-time via YFinance
+                          </span>
+                          <button
+                            onClick={() => fetchLiveRatios(ticker)}
+                            className="flex items-center gap-1 hover:text-blue-500 transition-colors font-bold"
+                          >
+                            <Activity className="w-3 h-3" />
+                            Refresh
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -935,14 +1022,13 @@ export default function App() {
                         </span>
                         
                         {userTier === 'free' ? (
-                          <div className={`w-full max-w-md h-[350px] ${cardBg} border-2 ${theme==='dark'?'border-slate-700':'border-slate-200'} border-dashed rounded-3xl flex flex-col items-center justify-center relative shadow-2xl animate-scale-in`}>
-                            <BarChart3 className={`w-16 h-16 ${theme==='dark'?'text-slate-700':'text-slate-300'} mb-5 animate-pulse`} />
-                            <p className={`${textMuted} text-lg font-black tracking-wide`}>
-                              Google AdSense Placeholder
-                            </p>
-                            <p className={`${textMuted} text-sm font-semibold mt-2`}>
-                              Ad block renders here
-                            </p>
+                          <div className={`w-full max-w-md h-[350px] ${cardBg} border-2 ${theme==='dark'?'border-slate-700':'border-slate-200'} border-dashed rounded-3xl flex flex-col items-center justify-center relative shadow-2xl animate-scale-in overflow-hidden`}>
+                            <ins className="adsbygoogle"
+                                 style={{ display: "block", width: "100%", height: "100%" }}
+                                 data-ad-client="ca-pub-YOUR_PUBLISHER_ID"
+                                 data-ad-slot="YOUR_AD_SLOT_ID"
+                                 data-ad-format="auto"
+                                 data-full-width-responsive="true"></ins>
                           </div>
                         ) : (
                           <div className={`w-full max-w-md h-[350px] ${cardBg} border-4 border-emerald-500/40 rounded-3xl flex flex-col items-center justify-center relative shadow-2xl animate-scale-in`}>
@@ -1028,6 +1114,7 @@ export default function App() {
             </div>
           )}
 
+          {/* Footer */}
           <footer className={`mt-20 pt-12 border-t-2 ${theme==='dark'?'border-slate-800':'border-slate-200'} pb-12 animate-fade-in`}>
             <div className="flex flex-col lg:flex-row justify-between items-start gap-12">
               <div className="max-w-2xl animate-slide-right">
@@ -1080,6 +1167,17 @@ export default function App() {
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: ${theme==='dark'?'linear-gradient(180deg, #3b82f6, #8b5cf6)':'linear-gradient(180deg, #60a5fa, #a78bfa)'}; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: ${theme==='dark'?'linear-gradient(180deg, #2563eb, #7c3aed)':'linear-gradient(180deg, #3b82f6, #8b5cf6)'}; }
+        
+        .shimmer {
+          background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0) 100%);
+          background-size: 200% 100%;
+          animation: shimmer 2s infinite linear;
+        }
+        
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
         
         @keyframes blob { 
           0%, 100% { transform: translate(0px, 0px) scale(1) rotate(0deg); } 
