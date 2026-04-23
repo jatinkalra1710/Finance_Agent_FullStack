@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="AI Stock Analyst API - Enterprise Edition",
     description="7-Agent Institutional Intelligence Engine for deep equity research.",
-    version="8.2.0"
+    version="8.3.0"
 )
 
 # CORS Configuration
@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- ORIGINAL UNCHAINED LLM CONFIGURATION ---
+# --- NATIVE LLM CONFIGURATION ---
 MODEL = "gemini/gemini-2.5-flash"
 tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY", ""))
 
@@ -53,29 +53,30 @@ async def health_check():
         "status": "Operational",
         "service": "AI Stock Analyst Core API",
         "timestamp": datetime.now().isoformat(),
-        "version": "8.2.0 (Expanded Intelligence Engine)"
+        "version": "8.3.0 (Native CrewAI Rate-Limit Edition)"
     }
 
-# --- THE ADVANCED MASKED SCRAPER (UNCHANGED & FLAWLESS) ---
+# --- THE ADVANCED MASKED SCRAPER ---
 def get_hybrid_metrics(ticker: str) -> dict:
     """
-    Bypasses Yahoo Finance Cloudflare blocks using a masked browser session 
+    Bypasses Yahoo Finance Cloudflare blocks using YF native routing
     and combines it with Screener.in data for maximum ratio extraction.
     """
     metrics = {}
     clean_ticker = ticker.replace('.NS', '').replace('.BO', '').split('.')[0]
     yf_ticker = f"{clean_ticker}.NS" if not ticker.startswith('^') else ticker
     
-    session = requests.Session()
-    session.headers.update({
+    # Session specifically masked for Screener.in
+    screener_session = requests.Session()
+    screener_session.headers.update({
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5'
     })
     
-    # 1. YAHOO FINANCE DATA EXTRACTION
+    # 1. YAHOO FINANCE DATA EXTRACTION (Fix applied: removed custom session)
     try:
-        stock = yf.Ticker(yf_ticker, session=session)
+        stock = yf.Ticker(yf_ticker) # Let YF handle its own anti-bot session internally
         hist = stock.history(period="1mo")
         fast = stock.fast_info
         
@@ -119,9 +120,9 @@ def get_hybrid_metrics(ticker: str) -> dict:
     if not ticker.startswith('^'):
         try:
             url = f"https://www.screener.in/company/{clean_ticker}/consolidated/"
-            res = session.get(url, timeout=5)
+            res = screener_session.get(url, timeout=5)
             if res.status_code != 200:
-                res = session.get(f"https://www.screener.in/company/{clean_ticker}/", timeout=5)
+                res = screener_session.get(f"https://www.screener.in/company/{clean_ticker}/", timeout=5)
             
             if res.status_code == 200:
                 soup = BeautifulSoup(res.text, 'html.parser')
@@ -196,7 +197,7 @@ def advanced_web_search(query: str) -> str:
 def comprehensive_yfinance_data(ticker: str) -> str:
     """Fetches highly comprehensive real-time financial data, historical price action, and institutional holdings."""
     try:
-        stock = yf.Ticker(ticker)
+        stock = yf.Ticker(ticker) # Removed custom session here too
         hist = stock.history(period="3mo")
         if hist.empty:
             return "No historical data found for this ticker."
@@ -234,6 +235,7 @@ async def analyze_stock(request: AnalyzeRequest):
         ticker = request.ticker
         company_name = request.company_name
         
+        # Fetch rich UI metrics instantly using the Hybrid Engine
         ui_metrics = get_hybrid_metrics(ticker)
 
         # ==========================================
@@ -245,49 +247,49 @@ async def analyze_stock(request: AnalyzeRequest):
             goal=f"Gather, cross-verify, and compile an exhaustive, institutional-grade financial and news dossier for {company_name} ({ticker}) as of {today}.",
             backstory="You are an elite, highly meticulous market researcher with decades of experience at top-tier hedge funds. You dig deep into SEC filings, financial statements, recent earnings calls, management changes, and macroeconomic trends. You cross-reference real-time Yahoo Finance data with deep web searches to ensure absolute, 100% accuracy. You leave no stone unturned. If data is missing or ambiguous, you state it clearly rather than hallucinating. Your data forms the bedrock of billion-dollar investment decisions.",
             tools=[comprehensive_yfinance_data, advanced_web_search],
-            llm=MODEL, verbose=True
+            llm=MODEL, max_iter=3, verbose=True
         )
         
         quant_agent = Agent(
             role="Lead Quantitative Financial Engineer & Forensic Accountant",
             goal="Execute a rigorous, mathematically sound fundamental analysis of balance sheets, cash flows, and valuation multiples.",
             backstory="You hold a PhD in Financial Engineering and specialize in forensic accounting and deep-value investing. You look far beyond the basic P/E ratio, diving deep into Price-to-Book, Debt-to-Equity ratios, Free Cash Flow yields, Return on Equity (ROE), and Return on Capital Employed (ROCE). You compare the company's current valuation against its 10-year historical averages and sector peers to identify mispricings. You aggressively hunt for accounting anomalies and highlight red flags in balance sheets instantly.",
-            llm=MODEL, verbose=True
+            llm=MODEL, max_iter=3, verbose=True
         )
         
         technical_agent = Agent(
             role="Master Technical Analyst (CMT) & Trend Strategist",
             goal="Analyze price momentum, volume profiles, moving averages, and key chart patterns to determine optimal entry and exit viability.",
             backstory="You are a seasoned Chartered Market Technician (CMT) who has navigated multiple bear and bull markets. You analyze 50-day and 200-day simple moving averages, RSI, MACD, Bollinger Bands, and volume anomalies to decode institutional footprint. You mathematically identify strict support floors and resistance ceilings. You do not guess; you read the tape. You clearly state if a stock is technically overbought, oversold, in a death cross, or breaking out of consolidation.",
-            llm=MODEL, verbose=True
+            llm=MODEL, max_iter=3, verbose=True
         )
         
         sentiment_agent = Agent(
             role="Director of Market Sentiment & Behavioral Economics",
             goal="Synthesize news tone, retail chatter, institutional moves, and broader market psychology into a definitive sentiment rating.",
             backstory="You are a world-renowned behavioral economist who understands that markets are driven by fear and greed. You analyze the linguistic tone of recent news articles, analyst upgrades or downgrades, and institutional buying pressure. You synthesize this abstract, qualitative data into a concrete, actionable sentiment rating (Extreme Bullish, Bullish, Neutral, Bearish, Extreme Bearish). You provide the psychological reasoning behind current price movements and predict retail reaction to upcoming catalysts.",
-            llm=MODEL, verbose=True
+            llm=MODEL, max_iter=3, verbose=True
         )
         
         sector_agent = Agent(
             role="Global Sector & Macro-Economic Strategist",
             goal=f"Analyze {company_name}'s competitive economic moat, market share dynamics, and vulnerability to macroeconomic shifts.",
             backstory="You are a visionary macro-strategist who understands the global economic machine. You analyze the entire sector's headwinds and tailwinds. You ruthlessly evaluate the company's 'economic moat', including brand pricing power, switching costs, network effects, and cost advantages. You factor in global inflation rates, central bank interest rate policies, government regulatory risks, and geopolitical tensions to see if the company can survive a macro-economic shock.",
-            llm=MODEL, verbose=True
+            llm=MODEL, max_iter=3, verbose=True
         )
         
         risk_agent = Agent(
             role="Chief Risk & Compliance Officer",
             goal=f"Identify, categorize, and relentlessly prioritize the top 5 absolute worst-case material risks for {company_name}.",
             backstory="You are a paranoid, highly effective Chief Risk Officer whose sole purpose is capital preservation. Your job is to protect client money at all costs. You actively look for reasons NOT to invest. You evaluate catastrophic liquidity crises, imminent regulatory crackdowns, supply chain dependencies, key-man risks, and existential threats from technological obsolescence. You assign a strict probability (Low/Medium/High) and an impact severity to every single risk factor.",
-            llm=MODEL, verbose=True
+            llm=MODEL, max_iter=3, verbose=True
         )
         
         strategist_agent = Agent(
             role="Chief Investment Officer (CIO) & Portfolio Manager",
             goal="Synthesize the complex findings of all 6 specialized agents into a masterpiece Executive Investment Memo ready for a billionaire client.",
             backstory="You are the legendary CIO of a massive institutional wealth management firm, managing billions in AUM. You take the highly technical, granular reports from your team of 6 elite analysts and weave them together into a beautiful, easy-to-read, highly actionable Executive Memo. Your writing is crisp, authoritative, objective, and perfectly formatted. You weigh the bull case against the bear case perfectly, and you always end with a definitive, courageous conclusion on whether to Buy, Hold, or Sell.",
-            llm=MODEL, verbose=True
+            llm=MODEL, max_iter=3, verbose=True
         )
 
         tasks = [
@@ -340,10 +342,12 @@ async def analyze_stock(request: AnalyzeRequest):
             )
         ]
 
+        # FIX APPLIED: max_rpm=12 added here to natively throttle CrewAI and prevent Google API rate limits
         crew = Crew(
             agents=[research_agent, quant_agent, technical_agent, sentiment_agent, sector_agent, risk_agent, strategist_agent],
             tasks=tasks,
-            process=Process.sequential
+            process=Process.sequential,
+            max_rpm=12
         )
         
         result = crew.kickoff(inputs={"company": company_name, "ticker": ticker})
