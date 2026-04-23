@@ -36,9 +36,8 @@ app.add_middleware(
 # --- THE NATIVE LLM FIX ---
 # Switched to 1.5-flash to guarantee LiteLLM/CrewAI compatibility on Render
 gemini_llm = LLM(
-    model="gemini/gemini-3.0",
-    api_key=os.environ.get("GEMINI_API_KEY"),
-    temperature=0.1
+    model="gemini/gemini-2.5-flash",
+    api_key=os.environ.get("GEMINI_API_KEY")
 )
 
 tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY", ""))
