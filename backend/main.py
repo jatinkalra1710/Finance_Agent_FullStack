@@ -36,7 +36,7 @@ app.add_middleware(
 # --- THE NATIVE LLM FIX ---
 # Switched to 1.5-flash to guarantee LiteLLM/CrewAI compatibility on Render
 gemini_llm = LLM(
-    model="gemini-2.5-flash",
+    model="gemini/gemini-3.0",
     api_key=os.environ.get("GEMINI_API_KEY"),
     temperature=0.1
 )
