@@ -115,7 +115,7 @@ async def analyze_stock(request: AnalyzeRequest):
         # ========================================================================
         research_agent = Agent(
             role="Senior Market Research Analyst",
-            goal=f"Gather and validate comprehensive financial data and news for {company_name} ({ticker}) as of {today}",
+            goal=f"Gather and validate comprehensive financial data and news for {company_name} ({ticker}) as of {today} in short",
             backstory="""You are a veteran market researcher with 15+ years at top investment banks 
             like Goldman Sachs and JP Morgan. You have access to multiple data sources and always 
             cross-verify information. You use web search as a backup when primary data sources fail. 
@@ -130,7 +130,7 @@ async def analyze_stock(request: AnalyzeRequest):
         # ========================================================================
         quant_agent = Agent(
             role="Quantitative Financial Analyst",
-            goal="Perform fundamental analysis on financial metrics and company valuation",
+            goal="Perform fundamental analysis on financial metrics and company valuation in breif but dont miss important information",
             backstory="""You are a PhD in Financial Engineering from MIT, specializing in equity 
             valuation and financial modeling. You analyze P/E ratios, market cap, revenue growth, 
             profit margins, and other fundamental metrics. You compare companies against their 
@@ -145,8 +145,8 @@ async def analyze_stock(request: AnalyzeRequest):
         # ========================================================================
         technical_agent = Agent(
             role="Senior Technical Analyst",
-            goal="Analyze price trends, chart patterns, and technical indicators",
-            backstory="""You are a Chartered Market Technician (CMT) with 12+ years of experience 
+            goal="Analyze price trends, chart patterns, and technical indicators in breif but dont miss important information",
+            backstory="""You are a Chartered Market Technician (CMT) with 30+ years of experience 
             in technical analysis. You analyze 52-week price ranges, volume trends, support and 
             resistance levels, and price momentum. You identify chart patterns like head and shoulders, 
             double tops/bottoms, and trend channels. You calculate relative strength and identify 
@@ -175,8 +175,8 @@ async def analyze_stock(request: AnalyzeRequest):
         # ========================================================================
         sector_agent = Agent(
             role="Sector & Industry Specialist",
-            goal=f"Analyze {company_name}'s position within its industry and identify competitive dynamics",
-            backstory="""You are an industry analyst who has covered multiple sectors for major 
+            goal=f"Analyze {company_name}'s position within its industry and identify competitive dynamics in breif but dont miss important information",
+            backstory="""You are an industry analyst with 40+ years of experience who has covered multiple sectors for major 
             research firms. You understand industry trends, competitive landscapes, market share 
             dynamics, and sector-specific risks. You compare companies against their direct competitors, 
             identify market leaders and laggards, and spot emerging threats and opportunities. You 
@@ -191,9 +191,9 @@ async def analyze_stock(request: AnalyzeRequest):
         # ========================================================================
         risk_agent = Agent(
             role="Chief Risk Officer",
-            goal=f"Identify top 3-5 material risks facing {company_name} in current market conditions",
+            goal=f"Identify top 3-5 material risks facing {company_name} in current market conditions in breif but dont miss important information",
             backstory="""You are a highly experienced risk manager who has navigated multiple market 
-            crashes including the 2008 financial crisis and 2020 COVID crash. You have a keen eye 
+            crashes including the 2000 dot com bubble, 2008 financial crisis and 2020 COVID crash, 2024-2025 tarrif correction, 2026 US-Iran War Dip. You have a keen eye 
             for spotting risks before they materialize. You focus on: regulatory and compliance risks, 
             macroeconomic headwinds, industry disruption, competitive threats, management quality issues, 
             debt and liquidity concerns, and company-specific vulnerabilities. You quantify risk impact 
@@ -207,7 +207,7 @@ async def analyze_stock(request: AnalyzeRequest):
         # ========================================================================
         strategist_agent = Agent(
             role="Lead Investment Strategist & Portfolio Manager",
-            goal="Synthesize all findings into an executive investment memo with actionable insights",
+            goal="Synthesize all findings into an executive investment memo with actionable insights in breif but dont miss important information",
             backstory="""You are a Managing Director and Portfolio Manager at a top investment firm 
             managing $50B+ in assets. You have an MBA from Harvard Business School and 20+ years of 
             experience. You write clear, professional reports for institutional investors, pension funds, 
